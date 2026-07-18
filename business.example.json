@@ -1,0 +1,42 @@
+{
+  "name": "Summit Climate Solutions",
+  "description": "A fictional Las Vegas residential HVAC company used only for this software demo.",
+  "phone": "+17025550199",
+  "timezone": "America/Los_Angeles",
+  "service_area": ["Las Vegas", "Henderson", "North Las Vegas", "Summerlin"],
+  "hours": {
+    "monday_friday": "7:00 AM–7:00 PM",
+    "saturday": "8:00 AM–4:00 PM",
+    "sunday": "Emergency calls only"
+  },
+  "booking_url": "https://example.com/book",
+  "policies": [
+    "Never quote a final repair price before an on-site diagnosis.",
+    "A diagnostic visit is $89 and is credited toward an approved repair.",
+    "Financing is available subject to lender approval.",
+    "Do not promise an arrival time until dispatch confirms it."
+  ],
+  "faqs": [
+    {
+      "question": "Do you offer emergency service?",
+      "answer": "Yes. Emergency service is available 24/7. A dispatcher confirms availability and timing."
+    },
+    {
+      "question": "Do you work on heat pumps?",
+      "answer": "Yes. The team services and installs central heat pumps and ductless mini-splits."
+    },
+    {
+      "question": "Which brands do you service?",
+      "answer": "The team services most major residential HVAC brands. A dispatcher can confirm a specific model."
+    },
+    {
+      "question": "Do you offer financing?",
+      "answer": "Yes. Financing options are available for approved customers; terms depend on the lender and project."
+    },
+    {
+      "question": "Are estimates free?",
+      "answer": "Replacement consultations are free. Repair calls begin with an $89 diagnostic visit, credited toward an approved repair."
+    }
+  ]
+}
+
