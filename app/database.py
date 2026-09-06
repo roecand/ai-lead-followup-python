@@ -71,6 +71,7 @@ class FollowUp(Base):
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     reason: Mapped[str] = mapped_column(String(160))
     status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

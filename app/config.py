@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
     twilio_from_number: str | None = None
-    database_url: str = "sqlite:///./lead_followup.db"
+    database_url: str
     business_file: Path = Path("business.example.json")
     public_base_url: str = "http://localhost:8000"
     timezone: str = "America/Los_Angeles"
