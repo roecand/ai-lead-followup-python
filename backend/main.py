@@ -14,6 +14,8 @@ from .schemas import DemoInbound, LeadCreate, LeadView, MessageView, ProcessResu
 from .service import ConversationService
 from .sms import build_sms_gateway
 
+from fastapi.middleware.cors import CORSMiddleware
+
 sms_gateway = build_sms_gateway()
 service = ConversationService(build_gateway(), sms_gateway, load_knowledge())
 scheduler = AsyncIOScheduler()
@@ -40,12 +42,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "mode": "demonstration"}
 
 
+# Create lead
 @app.post("/leads", response_model=LeadView, status_code=201)
 def create_lead(payload: LeadCreate, db: Session = Depends(get_db)) -> Lead:
     existing = db.scalar(select(Lead).where(Lead.phone == payload.phone))
@@ -58,6 +67,7 @@ def create_lead(payload: LeadCreate, db: Session = Depends(get_db)) -> Lead:
     return lead
 
 
+# Get lead by lead_id, basic int value. Should be changed to something other than just 1, 2, 3, ...
 @app.get("/leads/{lead_id}", response_model=LeadView)
 def get_lead(lead_id: int, db: Session = Depends(get_db)) -> Lead:
     lead = db.get(Lead, lead_id)
@@ -66,6 +76,7 @@ def get_lead(lead_id: int, db: Session = Depends(get_db)) -> Lead:
     return lead
 
 
+# Gets conversation between lead given the lead_id
 @app.get("/leads/{lead_id}/messages", response_model=list[MessageView])
 def get_conversation(lead_id: int, db: Session = Depends(get_db)) -> list[Message]:
     if not db.get(Lead, lead_id):
@@ -75,6 +86,7 @@ def get_conversation(lead_id: int, db: Session = Depends(get_db)) -> list[Messag
     ))
 
 
+# Sends first outbound message
 @app.post("/leads/{lead_id}/start", response_model=ProcessResult)
 async def start_conversation(lead_id: int, db: Session = Depends(get_db)) -> ProcessResult:
     lead = db.get(Lead, lead_id)
@@ -83,6 +95,7 @@ async def start_conversation(lead_id: int, db: Session = Depends(get_db)) -> Pro
     return await service.start(db, lead)
 
 
+# Gets leads where human interjection is needed
 @app.get("/handoffs", response_model=list[LeadView])
 def handoff_queue(db: Session = Depends(get_db)) -> list[Lead]:
     return list(db.scalars(
@@ -90,11 +103,13 @@ def handoff_queue(db: Session = Depends(get_db)) -> list[Lead]:
     ))
 
 
+# Simulates inbound message
 @app.post("/demo/inbound", response_model=ProcessResult)
 async def demo_inbound(payload: DemoInbound, db: Session = Depends(get_db)) -> ProcessResult:
     return await service.receive(db, payload.phone, payload.body, payload.provider_id)
 
 
+# Twilio inbound
 @app.post("/webhooks/twilio/inbound")
 async def twilio_inbound(
     From: str = Form(...), Body: str = Form(...), MessageSid: str = Form(...),
@@ -105,6 +120,7 @@ async def twilio_inbound(
     return Response(content="<Response></Response>", media_type="application/xml")
 
 
+# Runs the follow up script
 @app.post("/admin/run-followups")
 async def trigger_followups() -> dict[str, int]:
     # Production TODO: protect this route with admin authentication.
