@@ -5,8 +5,10 @@ description = "Reference architecture for an AI-assisted SMS lead follow-up syst
 requires-python = ">=3.11"
 dependencies = [
   "apscheduler>=3.10,<4",
+  "bcrypt<4.1",
   "fastapi>=0.115,<1",
   "openai>=2.0,<3",
+  "passlib[bcrypt]>=1.7.4",
   "psycopg[binary]>=3.3.5",
   "pydantic-settings>=2.6,<3",
   "python-multipart>=0.0.18,<1",

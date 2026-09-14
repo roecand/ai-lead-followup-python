@@ -6,19 +6,26 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .database import Lead, Message, SessionLocal, create_schema
+from .config import get_settings
+from .database import Lead, Message, SessionLocal, create_schema, User
 from .followups import run_due_followups
 from .knowledge import load_knowledge
 from .llm import build_gateway
-from .schemas import DemoInbound, LeadCreate, LeadView, MessageView, ProcessResult
+from .schemas import DemoInbound, LeadCreate, LeadView, MessageView, ProcessResult, LoginRequest, SignupRequest
 from .service import ConversationService
 from .sms import build_sms_gateway
 
 from fastapi.middleware.cors import CORSMiddleware
 
+import jwt
+from datetime import datetime, timedelta, timezone
+from passlib.context import CryptContext
+
+
 sms_gateway = build_sms_gateway()
 service = ConversationService(build_gateway(), sms_gateway, load_knowledge())
 scheduler = AsyncIOScheduler()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def get_db():
@@ -45,6 +52,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -125,3 +133,43 @@ async def twilio_inbound(
 async def trigger_followups() -> dict[str, int]:
     # Production TODO: protect this route with admin authentication.
     return {"sent": await run_due_followups(sms_gateway)}
+
+@app.post("/auth/login", status_code=204)
+async def auth_login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> None:
+    user = db.scalar(select(User).where(User.email == payload.email))
+
+    if not user or not pwd_context.verify(payload.password, user.hashed_password):
+        raise HTTPException(401, "Invalid email or password")
+
+    expires_at = datetime.utcnow() + timedelta(minutes=30)
+    access_token = jwt.encode(
+        {"user_id": user.id, "exp": expires_at},
+        get_settings().jwt_secret,
+        algorithm="HS256",
+    )
+
+    response.set_cookie(
+        key="token",
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="Lax",
+        max_age=1800,
+    )
+
+# Only admin can create an account for a client right now, though no admin checks are in place atm
+@app.post("/admin/insert_user", status_code=204)
+async def insert_user(payload: SignupRequest, db: Session = Depends(get_db)) -> None:
+    existing_user = db.scalar(select(User).where(User.email == payload.email))
+
+    if existing_user:
+        raise HTTPException(409, "User with this email already exists")
+
+    user = User(
+        email=payload.email,
+        hashed_password=pwd_context.hash(payload.password),
+    )
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)

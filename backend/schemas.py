@@ -69,3 +69,11 @@ class ProcessResult(BaseModel):
     action: Literal["replied", "opted_out", "duplicate", "human_handoff", "ignored"]
     reply: str | None = None
     reason: str | None = None
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str
