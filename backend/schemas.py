@@ -73,6 +73,7 @@ class ProcessResult(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+    remember: bool = False
 
 class SignupRequest(BaseModel):
     email: str

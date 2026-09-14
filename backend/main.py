@@ -1,13 +1,13 @@
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import Depends, FastAPI, Form, HTTPException
+from fastapi import Depends, FastAPI, Form, HTTPException, Cookie
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .database import Lead, Message, SessionLocal, create_schema, User
+from .database import Lead, Message, SessionLocal, create_schema, User, RefreshToken
 from .followups import run_due_followups
 from .knowledge import load_knowledge
 from .llm import build_gateway
@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import jwt
 from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
+import secrets
 
 
 sms_gateway = build_sms_gateway()
@@ -148,9 +149,54 @@ async def auth_login(payload: LoginRequest, response: Response, db: Session = De
         algorithm="HS256",
     )
 
+    refresh_lifetime = timedelta(days=30) if payload.remember else timedelta(days=1)
+    refresh_value = secrets.token_hex(32)
+    refresh_expires = datetime.utcnow() + refresh_lifetime
+
+    db.add(RefreshToken(user_id=user.id, token=refresh_value, expires_at=refresh_expires,))
+    db.commit()
+
     response.set_cookie(
         key="token",
         value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="Lax",
+        max_age=1800,
+    )
+
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_value,
+        httponly=True,
+        secure=True,
+        samesite="Lax",
+        max_age=int(refresh_lifetime.total_seconds()),
+    )
+
+@app.post("/auth/refresh", status_code=204)
+async def auth_refresh(response: Response, db: Session = Depends(get_db), refresh_token: str | None = Cookie(defualt=None)) -> None:
+    if not refresh_token:
+        raise HTTPException(401, "No refresh token provided")
+
+    stored = db.scalar(select(RefreshToken).where(RefreshToken.token == refresh_token))
+
+    if not stored or stored.expires_at < datetime.now(timezone.utc):
+        if stored:
+            db.delete(stored)
+            db.commit()
+        raise HTTPException(401, "Refresh token invalid or expired")
+
+    new_access_epires = datetime.utcnow() + timedelta(minutes=30)
+    new_access_token = jwt.encode(
+        {"user_id": stored.user_id, "exp": new_access_epires},
+        get_settings().jwt_secret,
+        algorithm="HS256",
+    )
+
+    response.set_cookie(
+        key="token",
+        value=new_access_token,
         httponly=True,
         secure=True,
         samesite="Lax",
@@ -173,3 +219,4 @@ async def insert_user(payload: SignupRequest, db: Session = Depends(get_db)) -> 
     db.add(user)
     db.commit()
     db.refresh(user)
+

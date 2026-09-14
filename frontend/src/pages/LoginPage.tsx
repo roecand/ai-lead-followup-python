@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 /**
  * LoginPage
@@ -24,6 +25,7 @@ export default function LoginPage({
   onSignIn?: (args: { email: string; password: string; remember: boolean }) => Promise<void>;
   onGoogleSignIn?: () => Promise<void>;
 }) {
+    const navigate = useNavigate();
   // --- form state -----------------------------------------------------------
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,14 +53,17 @@ export default function LoginPage({
               method: "POST",
               credentials: "include",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ email: email.trim(), password }),
+              body: JSON.stringify({ email: email.trim(), password, remember }),
           });
 
           if (!response.ok){
             throw new Error("Sign-in failed");
           }
+
       }
-    } catch (err) {
+      navigate("/messageboard");
+    }
+    catch (err) {
       setError(
         err?.message === "Sign-in is not connected to a backend yet."
           ? err.message
@@ -76,7 +81,7 @@ export default function LoginPage({
       if (onGoogleSignIn) {
         await onGoogleSignIn();
       } else {
-        // ===================== BACKEND HOOK 2 of 2 =========================
+        // ===================== BACKEND HOOK =========================
         // Google sign-in. This one navigates away to Google and comes back,
         // so there is usually nothing to await and no success state to render.
         //
@@ -85,7 +90,7 @@ export default function LoginPage({
         //     options: { redirectTo: window.location.origin + "/leads" },
         //   });
         //   if (error) throw error;
-        // ===================================================================
+        // ===============================================================
         throw new Error("Google sign-in is not connected to a backend yet.");
       }
     } catch (err) {
