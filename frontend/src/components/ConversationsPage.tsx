@@ -12,9 +12,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
    WHERE YOU HOOK UP THE BACKEND -> search for "BACKEND HOOK".
    There are five of them, numbered, each with the route it maps to.
 
-   Pass any of the props below and that hook is skipped entirely, so you can
-   wire this up without editing the file. Pass none and it runs on the demo
-   data at the bottom so you can see the layout.
+   This component holds NO data of its own. Everything it shows comes from
+   the `leads` / `messagesByLead` props. Render it with no props and it just
+   shows an empty inbox, on purpose, there's nothing here to fall back to.
+   Wire up a parent component that fetches from your API and passes the
+   result down, see the BACKEND HOOK comments for exactly what each prop
+   needs to do.
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
@@ -57,14 +60,15 @@ export interface Lead {
   human_required: boolean;
   last_intent: string | null;
   created_at: string;
-  /** NEW FIELD, not in your Lead model yet. Whether the assistant is allowed
-   *  to keep answering this thread. `service.receive` would check it and bail
-   *  before calling the LLM. */
   ai_paused?: boolean;
 }
 
 interface ConversationsPageProps {
+  /** The lead list for the rail. Fetch this from your API in a parent
+   *  component and pass it down, see BACKEND HOOK 1. */
   leads?: Lead[];
+  /** One message array per lead id. Fetch a thread when it's opened (hook 2)
+   *  and keep accumulating them here as the user clicks around. */
   messagesByLead?: Record<number, Message[]>;
   onSelectLead?: (leadId: number) => void | Promise<void>;
   onSendMessage?: (args: { leadId: number; body: string }) => void | Promise<void>;
@@ -97,23 +101,32 @@ export default function ConversationsPage({
   onToggleAi,
   staffName = "You",
 }: ConversationsPageProps) {
-  /* --- data ---------------------------------------------------------------
-     When props are supplied they win. Otherwise local state holds the demo
-     data so sending a message still visibly does something.
-     ======================= BACKEND HOOK 1 of 5 =========================
-     Load the lead list.  GET /leads
-     Your main.py has /leads/{id} but no list route yet, so you'll need to
-     add one. Poll it, or push updates over a websocket if you'd rather.
-     ===================================================================== */
-  const [demoLeads, setDemoLeads] = useState<Lead[]>(DEMO_LEADS);
-  const [demoMessages, setDemoMessages] =
-    useState<Record<number, Message[]>>(DEMO_MESSAGES);
+  /* --- data -----------------------------------------------------------------
+     No local data lives here. `leadsProp` / `messagesProp` are what a parent
+     component passes in from your API. If nothing is passed, these default
+     to empty, on purpose, there's no demo data to fall back to anymore.
 
-  const leads = leadsProp ?? demoLeads;
-  const messagesByLead = messagesProp ?? demoMessages;
+     Local state below is used only for OPTIMISTIC UI, e.g. showing a message
+     the instant you hit send, before your backend has confirmed it. If you'd
+     rather always wait on the server response, you can drop the local
+     appendLocal() calls and rely entirely on messagesProp updating.
+
+     ======================= BACKEND HOOK 1 of 5 =========================
+     Load the lead list.  GET /leads  (or your company-scoped version,
+     e.g. GET /companies/{company_id}/leads)
+     Fetch this in a parent component and pass the result as the `leads` prop.
+     Poll it, or push updates over a websocket if you'd rather.
+     ===================================================================== */
+  const [localLeads, setLocalLeads] = useState<Lead[]>([]);
+  const [localMessages, setLocalMessages] =
+    useState<Record<number, Message[]>>({});
+
+  const leads = leadsProp ?? localLeads;
+  const messagesByLead = messagesProp ?? localMessages;
 
   /* --- selection and filtering -------------------------------------------- */
-  const [selectedId, setSelectedId] = useState<number | null>(leads[0]?.id ?? null);
+  // The user's explicit pick, if they've made one. Starts unset.
+  const [selectedIdOverride, setSelectedId] = useState<number | null>(null);
   const [filter, setFilter] = useState<"all" | "needs_you">("all");
   const [query, setQuery] = useState("");
 
@@ -131,6 +144,15 @@ export default function ConversationsPage({
   const [showDetail, setShowDetail] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  /* If nothing's been explicitly picked yet, fall back to the first lead.
+     This is computed fresh every render rather than synced via an effect,
+     so there's no extra render or setState-in-effect involved, and it stays
+     correct automatically once `leads` arrives async. */
+  const selectedId =
+    selectedIdOverride != null && leads.some((l) => l.id === selectedIdOverride)
+      ? selectedIdOverride
+      : leads[0]?.id ?? null;
 
   const selected = leads.find((l) => l.id === selectedId) ?? null;
   const thread = selectedId != null ? messagesByLead[selectedId] ?? [] : [];
@@ -195,7 +217,9 @@ export default function ConversationsPage({
     /* ======================= BACKEND HOOK 2 of 5 =========================
        Load one thread.  GET /leads/{id}/messages
        That route already exists in main.py and returns MessageView[].
-       If you keep every thread in memory you can skip this entirely.
+       Have this callback fetch it and merge the result into whatever state
+       backs your `messagesByLead` prop. If you keep every thread loaded up
+       front instead, you can skip passing onSelectLead entirely.
        ===================================================================== */
     if (onSelectLead) await onSelectLead(id);
   }
@@ -212,10 +236,12 @@ export default function ConversationsPage({
       await onToggleAi({ leadId: selected.id, paused });
       return;
     }
-    setDemoLeads((prev) =>
+    // No onToggleAi passed in: update local state only, so the UI still
+    // reacts. Once you wire the real handler this branch stops running.
+    setLocalLeads((prev) =>
       prev.map((l) => (l.id === selected.id ? { ...l, ai_paused: paused } : l))
     );
-    appendDemo(selected.id, {
+    appendLocal(selected.id, {
       direction: "internal",
       author: "system",
       body: paused
@@ -246,17 +272,19 @@ export default function ConversationsPage({
       if (onSendMessage) {
         await onSendMessage({ leadId: selected.id, body });
       } else {
-        appendDemo(selected.id, { direction: "outbound", author: "staff", body });
+        // No onSendMessage passed in: reflect the send locally only, so the
+        // composer still visibly does something while you're wiring things up.
+        appendLocal(selected.id, { direction: "outbound", author: "staff", body });
         /* Sending while the assistant is live pauses it automatically. The
            alternative is two replies racing each other in the customer's
            thread. If you'd rather make it an explicit choice, drop this. */
         if (!selected.ai_paused) {
-          setDemoLeads((prev) =>
+          setLocalLeads((prev) =>
             prev.map((l) =>
               l.id === selected.id ? { ...l, ai_paused: true, human_required: false } : l
             )
           );
-          appendDemo(selected.id, {
+          appendLocal(selected.id, {
             direction: "internal",
             author: "system",
             body: "You took over. The assistant won't reply here until you hand it back.",
@@ -271,8 +299,11 @@ export default function ConversationsPage({
     }
   }
 
-  function appendDemo(leadId: number, partial: Omit<Message, "id" | "lead_id" | "created_at">) {
-    setDemoMessages((prev) => {
+  /** Only touches local fallback state. Once real props are wired up your
+   *  own `onSendMessage` / `onToggleAi` handlers are what update
+   *  `messagesByLead`, this function stops being called at all. */
+  function appendLocal(leadId: number, partial: Omit<Message, "id" | "lead_id" | "created_at">) {
+    setLocalMessages((prev) => {
       const list = prev[leadId] ?? [];
       return {
         ...prev,
@@ -380,6 +411,8 @@ export default function ConversationsPage({
               <p className="gs-empty-rail">
                 {filter === "needs_you"
                   ? "No one is waiting on a person right now."
+                  : leads.length === 0
+                  ? "No conversations loaded yet."
                   : "No conversations match that search."}
               </p>
             ) : (
@@ -461,7 +494,11 @@ export default function ConversationsPage({
         <main className="gs-thread">
           {!selected ? (
             <div className="gs-empty">
-              <p className="gs-empty-line">Pick a conversation to read it.</p>
+              <p className="gs-empty-line">
+                {leads.length === 0
+                  ? "No conversations yet."
+                  : "Pick a conversation to read it."}
+              </p>
             </div>
           ) : (
             <>
@@ -751,87 +788,6 @@ function shortAgo(iso: string) {
   const days = Math.floor(hrs / 24);
   return days < 7 ? days + "d" : new Date(iso).toLocaleDateString([], { month: "numeric", day: "numeric" });
 }
-
-/* ---------------------------------------------------------------------------
-   DEMO DATA
-   Delete this whole section once you're passing real props in.
---------------------------------------------------------------------------- */
-
-const t = (minsAgo: number) => new Date(Date.now() - minsAgo * 60000).toISOString();
-
-const DEMO_LEADS: Lead[] = [
-  {
-    id: 1, first_name: "Renata", phone: "+17025550148", source: "website_form",
-    stage: "engaged", consent_to_sms: true, opted_out: false, human_required: true,
-    last_intent: "availability", created_at: t(190), ai_paused: false,
-  },
-  {
-    id: 2, first_name: "Curtis", phone: "+17025550193", source: "google_ads",
-    stage: "qualified", consent_to_sms: true, opted_out: false, human_required: false,
-    last_intent: "pricing", created_at: t(420), ai_paused: false,
-  },
-  {
-    id: 3, first_name: "Dee", phone: "+17025550117", source: "yard_sign",
-    stage: "booked", consent_to_sms: true, opted_out: false, human_required: false,
-    last_intent: "booking", created_at: t(1500), ai_paused: true,
-  },
-  {
-    id: 4, first_name: null, phone: "+17025550166", source: "inbound_demo",
-    stage: "new", consent_to_sms: true, opted_out: false, human_required: false,
-    last_intent: null, created_at: t(2600), ai_paused: false,
-  },
-  {
-    id: 5, first_name: "Marcus", phone: "+17025550172", source: "referral",
-    stage: "do_not_contact", consent_to_sms: false, opted_out: true, human_required: false,
-    last_intent: "not_interested", created_at: t(5400), ai_paused: false,
-  },
-];
-
-let mid = 100;
-const msg = (
-  lead_id: number,
-  direction: Direction,
-  author: Author,
-  body: string,
-  minsAgo: number,
-  extra: Partial<Message> = {}
-): Message => ({
-  id: mid++, lead_id, direction, author, body, created_at: t(minsAgo), ...extra,
-});
-
-const DEMO_MESSAGES: Record<number, Message[]> = {
-  1: [
-    msg(1, "outbound", "assistant", "Hi Renata, this is Green Star. How can we help? Reply STOP to opt out.", 190, { intent: "initial_outreach", confidence: "high" }),
-    msg(1, "inbound", "customer", "My water heater is leaking all over the garage floor", 176),
-    msg(1, "outbound", "assistant", "Sorry, that's a mess. If you can, shut the cold water valve on top of the heater. We handle tank and tankless replacements. Want the booking link?", 175, { intent: "service_question", confidence: "high" }),
-    msg(1, "inbound", "customer", "Can anyone come out tonight? It's getting worse", 22),
-    msg(1, "internal", "system", "Handed to a person. Tonight's availability isn't in the knowledge base, so the assistant stopped instead of guessing.", 22),
-  ],
-  2: [
-    msg(2, "outbound", "assistant", "Hi Curtis, this is Green Star. How can we help? Reply STOP to opt out.", 420, { intent: "initial_outreach", confidence: "high" }),
-    msg(2, "inbound", "customer", "what do you charge to look at an ac unit", 400),
-    msg(2, "outbound", "assistant", "Diagnostic visits are $89, and we credit it toward the repair if you go ahead with us. Want the booking link?", 399, { intent: "pricing", confidence: "high" }),
-    msg(2, "inbound", "customer", "yeah send it", 95),
-    msg(2, "outbound", "assistant", "Here you go: greenstar.example/book. A dispatcher will confirm the time with you.", 94, { intent: "booking", confidence: "high" }),
-  ],
-  3: [
-    msg(3, "outbound", "assistant", "Hi Dee, this is Green Star. How can we help? Reply STOP to opt out.", 1500, { intent: "initial_outreach", confidence: "high" }),
-    msg(3, "inbound", "customer", "I booked for Thursday but I need to move it, my kid has a thing", 320),
-    msg(3, "outbound", "assistant", "I'll have someone confirm a new time with you shortly.", 319, { intent: "booking", confidence: "low" }),
-    msg(3, "internal", "system", "You took over. The assistant won't reply here until you hand it back.", 300),
-    msg(3, "outbound", "staff", "Hi Dee, it's Alma at the office. Friday morning between 8 and 10 works on our end. Does that suit?", 299),
-    msg(3, "inbound", "customer", "Friday is perfect thank you", 290),
-  ],
-  4: [
-    msg(4, "inbound", "customer", "do you guys do swamp coolers", 2600),
-    msg(4, "outbound", "assistant", "I want to make sure I give you the right answer. I'll have a team member confirm that with you.", 2599, { intent: "unknown", confidence: "low" }),
-  ],
-  5: [
-    msg(5, "outbound", "assistant", "Hi Marcus, this is Green Star. How can we help? Reply STOP to opt out.", 5400, { intent: "initial_outreach", confidence: "high" }),
-    msg(5, "inbound", "customer", "STOP", 5380),
-    msg(5, "internal", "system", "Lead opted out. All pending follow-ups cancelled.", 5380),
-  ],
-};
 
 /* ===========================================================================
    STYLES
@@ -1297,7 +1253,6 @@ const CSS = `
   outline-offset: 2px;
 }
 
-
 /* ---------- scrollbars ---------- */
 
 .gs-root ::-webkit-scrollbar { width: 9px; }
@@ -1306,7 +1261,6 @@ const CSS = `
   border: 2px solid transparent; background-clip: content-box;
 }
 .gs-root ::-webkit-scrollbar-thumb:hover { background: #B4B0A2; background-clip: content-box; }
-
 
 /* ---------- responsive ---------- */
 

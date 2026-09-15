@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .database import Lead, Message, SessionLocal, create_schema, User, RefreshToken
+from .database import Lead, Message, SessionLocal, create_schema, User, RefreshToken, Company
 from .followups import run_due_followups
 from .knowledge import load_knowledge
 from .llm import build_gateway
@@ -21,6 +21,8 @@ import jwt
 from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
 import secrets
+
+import uuid
 
 
 sms_gateway = build_sms_gateway()
@@ -78,16 +80,21 @@ def create_lead(payload: LeadCreate, db: Session = Depends(get_db)) -> Lead:
 
 # Get lead by lead_id, basic int value. Should be changed to something other than just 1, 2, 3, ...
 @app.get("/leads/{lead_id}", response_model=LeadView)
-def get_lead(lead_id: int, db: Session = Depends(get_db)) -> Lead:
+def get_lead(lead_id: uuid.UUID, db: Session = Depends(get_db)) -> Lead:
     lead = db.get(Lead, lead_id)
     if not lead:
         raise HTTPException(404, "Lead not found")
     return lead
 
 
+@app.get("/company/{company_id}/leads", response_model=list[LeadView])
+def list_leads(company_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Lead]:
+    return list(db.scalars(select(Lead).where(company_id == Lead.company_id).order_by(Lead.updated_at.desc())))
+
+
 # Gets conversation between lead given the lead_id
 @app.get("/leads/{lead_id}/messages", response_model=list[MessageView])
-def get_conversation(lead_id: int, db: Session = Depends(get_db)) -> list[Message]:
+def get_conversation(lead_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Message]:
     if not db.get(Lead, lead_id):
         raise HTTPException(404, "Lead not found")
     return list(db.scalars(
@@ -97,7 +104,7 @@ def get_conversation(lead_id: int, db: Session = Depends(get_db)) -> list[Messag
 
 # Sends first outbound message
 @app.post("/leads/{lead_id}/start", response_model=ProcessResult)
-async def start_conversation(lead_id: int, db: Session = Depends(get_db)) -> ProcessResult:
+async def start_conversation(lead_id: uuid.UUID, db: Session = Depends(get_db)) -> ProcessResult:
     lead = db.get(Lead, lead_id)
     if not lead:
         raise HTTPException(404, "Lead not found")
@@ -115,17 +122,23 @@ def handoff_queue(db: Session = Depends(get_db)) -> list[Lead]:
 # Simulates inbound message
 @app.post("/demo/inbound", response_model=ProcessResult)
 async def demo_inbound(payload: DemoInbound, db: Session = Depends(get_db)) -> ProcessResult:
-    return await service.receive(db, payload.phone, payload.body, payload.provider_id)
+    company = db.scalar(select(Company).where(Company.twilio_number == payload.company_phone))
+    if company is None:
+        raise HTTPException(404, "No company is registered for this number")
+    return await service.receive(db, company, payload.phone, payload.body, payload.provider_id)
 
 
 # Twilio inbound
 @app.post("/webhooks/twilio/inbound")
 async def twilio_inbound(
-    From: str = Form(...), Body: str = Form(...), MessageSid: str = Form(...),
+    From: str = Form(...), To: str = Form(...), Body: str = Form(...), MessageSid: str = Form(...),
     db: Session = Depends(get_db),
 ) -> Response:
+    company = db.scalar(select(Company).where(Company.twilio_number == To))
+    if company is None:
+        raise HTTPException(404, "No company is registered for this number")
     # Production TODO: validate Twilio's X-Twilio-Signature before processing.
-    await service.receive(db, From, Body, MessageSid)
+    await service.receive(db, company, From, Body, MessageSid)
     return Response(content="<Response></Response>", media_type="application/xml")
 
 
@@ -142,7 +155,7 @@ async def auth_login(payload: LoginRequest, response: Response, db: Session = De
     if not user or not pwd_context.verify(payload.password, user.hashed_password):
         raise HTTPException(401, "Invalid email or password")
 
-    expires_at = datetime.utcnow() + timedelta(minutes=30)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
     access_token = jwt.encode(
         {"user_id": user.id, "exp": expires_at},
         get_settings().jwt_secret,
@@ -151,9 +164,9 @@ async def auth_login(payload: LoginRequest, response: Response, db: Session = De
 
     refresh_lifetime = timedelta(days=30) if payload.remember else timedelta(days=1)
     refresh_value = secrets.token_hex(32)
-    refresh_expires = datetime.utcnow() + refresh_lifetime
+    refresh_expires = datetime.now(timezone.utc) + refresh_lifetime
 
-    db.add(RefreshToken(user_id=user.id, token=refresh_value, expires_at=refresh_expires,))
+    db.add(RefreshToken(user_id=str(user.id), token=refresh_value, expires_at=refresh_expires,))
     db.commit()
 
     response.set_cookie(
@@ -161,7 +174,7 @@ async def auth_login(payload: LoginRequest, response: Response, db: Session = De
         value=access_token,
         httponly=True,
         secure=True,
-        samesite="Lax",
+        samesite="lax",
         max_age=1800,
     )
 
@@ -170,12 +183,12 @@ async def auth_login(payload: LoginRequest, response: Response, db: Session = De
         value=refresh_value,
         httponly=True,
         secure=True,
-        samesite="Lax",
+        samesite="lax",
         max_age=int(refresh_lifetime.total_seconds()),
     )
 
 @app.post("/auth/refresh", status_code=204)
-async def auth_refresh(response: Response, db: Session = Depends(get_db), refresh_token: str | None = Cookie(defualt=None)) -> None:
+async def auth_refresh(response: Response, db: Session = Depends(get_db), refresh_token: str | None = Cookie(default=None)) -> None:
     if not refresh_token:
         raise HTTPException(401, "No refresh token provided")
 
@@ -187,9 +200,9 @@ async def auth_refresh(response: Response, db: Session = Depends(get_db), refres
             db.commit()
         raise HTTPException(401, "Refresh token invalid or expired")
 
-    new_access_epires = datetime.utcnow() + timedelta(minutes=30)
+    new_access_epires = datetime.now(timezone.utc) + timedelta(minutes=30)
     new_access_token = jwt.encode(
-        {"user_id": stored.user_id, "exp": new_access_epires},
+        {"user_id": str(stored.user_id), "exp": new_access_epires},
         get_settings().jwt_secret,
         algorithm="HS256",
     )
@@ -199,7 +212,7 @@ async def auth_refresh(response: Response, db: Session = Depends(get_db), refres
         value=new_access_token,
         httponly=True,
         secure=True,
-        samesite="Lax",
+        samesite="lax",
         max_age=1800,
     )
 
@@ -211,12 +224,21 @@ async def insert_user(payload: SignupRequest, db: Session = Depends(get_db)) -> 
     if existing_user:
         raise HTTPException(409, "User with this email already exists")
 
+    company = db.scalar(select(Company).where(Company.join_code == payload.join_code))
+
+    if not company:
+        raise HTTPException(409, "Code is either expired or the company was never registered. Check your code or contact an admin to get your company registered.")
+
     user = User(
         email=payload.email,
         hashed_password=pwd_context.hash(payload.password),
+        company=company,
     )
 
     db.add(user)
     db.commit()
     db.refresh(user)
+
+# @app.post("/admin/create_company", status_code=204)
+# async def create_company(payload: SignupRequest, db: Session = Depends(get_db)) -> None:
 

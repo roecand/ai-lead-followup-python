@@ -72,7 +72,7 @@ class DemoGateway(LLMGateway):
             faq = next(item for item in knowledge.faqs if "estimate" in item.question.lower())
             return ReplyDecision(
                 reply=f"{faq.answer} Want the booking link?",
-                intent="pricing", confidence="high", lead_stage="qualified",
+                intent="pricing", confidence="high", lead_stage="qualified", # TODO: Search what the issue is here. Not vital right now
                 needs_human=False, follow_up_hours=24,
             )
         if any(word in incoming for word in ("book", "appointment", "schedule")):

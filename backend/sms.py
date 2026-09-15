@@ -14,12 +14,12 @@ class SendReceipt:
 
 class SMSGateway(ABC):
     @abstractmethod
-    async def send(self, to: str, body: str) -> SendReceipt:
+    async def send(self, to: str, from_number: str, body: str) -> SendReceipt:
         raise NotImplementedError
 
 
 class ConsoleSMS(SMSGateway):
-    async def send(self, to: str, body: str) -> SendReceipt:
+    async def send(self, to: str, from_number: str, body: str) -> SendReceipt:
         print(f"[DEMO SMS -> {to}] {body}")
         return SendReceipt(provider_id=f"demo-{uuid4()}")
 
@@ -27,13 +27,13 @@ class ConsoleSMS(SMSGateway):
 class TwilioSMS(SMSGateway):
     def __init__(self) -> None:
         settings = get_settings()
-        if not all((settings.twilio_account_sid, settings.twilio_auth_token, settings.twilio_from_number)):
+        if not all((settings.twilio_account_sid, settings.twilio_auth_token)):
             raise RuntimeError("Twilio mode requires account SID, auth token, and from number")
         self.client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
-        self.from_number = settings.twilio_from_number
 
-    async def send(self, to: str, body: str) -> SendReceipt:
-        message = self.client.messages.create(to=to, from_=self.from_number, body=body)
+    async def send(self, to: str, from_number: str, body: str) -> SendReceipt:
+
+        message = self.client.messages.create(to=to, from_=from_number, body=body)
         return SendReceipt(provider_id=message.sid)
 
 

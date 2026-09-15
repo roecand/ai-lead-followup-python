@@ -5,11 +5,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .database import Direction, FollowUp, Lead, LeadStage, Message
+from .database import Direction, FollowUp, Lead, LeadStage, Message, Company
 from .knowledge import BusinessKnowledge
 from .llm import LLMGateway
 from .schemas import ProcessResult, ReplyDecision
 from .sms import SMSGateway
+
+import uuid
 
 STOP_WORDS = {"stop", "stopall", "unsubscribe", "cancel", "end", "quit"}
 START_WORDS = {"start", "unstop", "yes"}
@@ -36,7 +38,8 @@ class ConversationService:
                 lead_id=lead.id, action="duplicate", reason="Conversation was already started"
             )
         greeting = f"Hi{f' {lead.first_name}' if lead.first_name else ''}, this is {self.knowledge.name}. How can we help? Reply STOP to opt out."
-        receipt = await self.sms.send(lead.phone, greeting)
+        company_twilio_phone = lead.company.twilio_number
+        receipt = await self.sms.send(lead.phone, company_twilio_phone, greeting)
         db.add(Message(
             lead_id=lead.id, direction=Direction.OUTBOUND, body=greeting,
             provider_id=receipt.provider_id, intent="initial_outreach", confidence="high",
@@ -51,12 +54,12 @@ class ConversationService:
         return ProcessResult(lead_id=lead.id, action="replied", reply=greeting)
 
     async def receive(
-        self, db: Session, phone: str, body: str, provider_id: str | None = None
+        self, db: Session, company: Company, phone: str, body: str, provider_id: str | None = None
     ) -> ProcessResult:
         normalized = body.strip()
-        lead = db.scalar(select(Lead).where(Lead.phone == phone))
+        lead = db.scalar(select(Lead).where(Lead.phone == phone, Lead.company_id == company.id))
         if lead is None:
-            lead = Lead(phone=phone, source="inbound_demo", consent_to_sms=True)
+            lead = Lead(phone=phone, source="inbound_demo", consent_to_sms=True, company_id=company.id, company=company)
             db.add(lead)
             db.flush()
 
@@ -110,7 +113,8 @@ class ConversationService:
                 )
 
         self._apply_decision(db, lead, decision)
-        receipt = await self.sms.send(lead.phone, decision.reply)
+        company_twilio_phone = lead.company.twilio_number
+        receipt = await self.sms.send(lead.phone, company_twilio_phone, decision.reply)
         db.add(Message(
             lead_id=lead.id, direction=Direction.OUTBOUND, body=decision.reply,
             provider_id=receipt.provider_id, intent=decision.intent, confidence=decision.confidence,
@@ -143,7 +147,7 @@ class ConversationService:
             ))
 
     @staticmethod
-    def _cancel_followups(db: Session, lead_id: int) -> None:
+    def _cancel_followups(db: Session, lead_id: uuid.UUID) -> None:
         for item in db.scalars(select(FollowUp).where(
             FollowUp.lead_id == lead_id, FollowUp.status == "pending"
         )):

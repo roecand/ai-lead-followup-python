@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
-import MessageBoard from "./pages/MessageBoard"
+import InboxPage from "./pages/InboxPage.tsx"
 
 function App() {
   return (
@@ -9,7 +9,7 @@ function App() {
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/messageboard" element={<MessageBoard />} />
+        <Route path="/messageboard" element={<InboxPage />} />
       </Routes>
     </BrowserRouter>
   );

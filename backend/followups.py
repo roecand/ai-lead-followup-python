@@ -21,7 +21,8 @@ async def run_due_followups(sms: SMSGateway) -> int:
                 continue
             body = f"Just checking in—would you like the booking link, or is there a question I can help with? Reply STOP to opt out."
             try:
-                receipt = await sms.send(lead.phone, body)
+                company_twilio_phone = lead.company.twilio_number
+                receipt = await sms.send(lead.phone, company_twilio_phone, body)
             except Exception as e:
                 item.attempts += 1
                 if item.attempts >= MAX_FOLLOWUP_ATTEMPTS:

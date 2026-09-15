@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from .database import Direction, LeadStage
-
+import uuid
 
 class LeadCreate(BaseModel):
     phone: str
@@ -15,6 +15,7 @@ class LeadCreate(BaseModel):
 
 class DemoInbound(BaseModel):
     phone: str
+    company_phone: str
     body: str
     provider_id: str | None = None
 
@@ -38,7 +39,7 @@ class ReplyDecision(BaseModel):
 
 
 class LeadView(BaseModel):
-    id: int
+    id: uuid.UUID
     phone: str
     first_name: str | None
     source: str
@@ -48,24 +49,26 @@ class LeadView(BaseModel):
     human_required: bool
     last_intent: str | None
     created_at: datetime
+    ai_paused: bool
 
     model_config = {"from_attributes": True}
 
 
 class MessageView(BaseModel):
-    id: int
-    lead_id: int
+    id: uuid.UUID
+    lead_id: uuid.UUID
     direction: Direction
     body: str
     intent: str | None
     confidence: str | None
     created_at: datetime
+    author: str | None
 
     model_config = {"from_attributes": True}
 
 
 class ProcessResult(BaseModel):
-    lead_id: int
+    lead_id: uuid.UUID
     action: Literal["replied", "opted_out", "duplicate", "human_handoff", "ignored"]
     reply: str | None = None
     reason: str | None = None
@@ -78,3 +81,4 @@ class LoginRequest(BaseModel):
 class SignupRequest(BaseModel):
     email: str
     password: str
+    join_code: str
