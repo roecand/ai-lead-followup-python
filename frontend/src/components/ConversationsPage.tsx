@@ -37,7 +37,7 @@ export interface Lead {
 
 interface ConversationsPageProps {
   leads?: Lead[];
-  messagesByLead?: Record<number, Message[]>;
+  messagesByLead?: Record<string, Message[]>;
   onSelectLead?: (leadId: string) => void | Promise<void>;
   onSendMessage?: (args: { leadId: string; body: string }) => void | Promise<void>;
   onToggleAi?: (args: { leadId: string; paused: boolean }) => void | Promise<void>;
@@ -68,19 +68,8 @@ export default function ConversationsPage({
   staffName = "You",
   pendingAiToggles,
 }: ConversationsPageProps) {
-  /* --- data -----------------------------------------------------------------
-     Local state below is used only for OPTIMISTIC UI, e.g. showing a message
-     the instant you hit send, before your backend has confirmed it. If you'd
-     rather always wait on the server response, you can drop the local
-     appendLocal() calls and rely entirely on messagesProp updating.
-
-     Hook 1
-*/
-  const [localLeads, setLocalLeads] = useState<Lead[]>([]);
-  const [localMessages, setLocalMessages] = useState<Record<string, Message[]>>({});
-
-  const leads = leadsProp ?? localLeads;
-  const messagesByLead = messagesProp ?? localMessages;
+  const leads = leadsProp ?? [];
+  const messagesByLead = messagesProp ?? {};
 
   /* --- selection and filtering -------------------------------------------- */
   // The user's explicit pick, if they've made one. Starts unset.
@@ -172,56 +161,27 @@ export default function ConversationsPage({
     setSelectedId(id);
     setDraft("");
     setError("");
-    // BACKEND HOOK 2 of 5
     if (onSelectLead) await onSelectLead(id);
   }
 
   async function setAiPaused(paused: boolean) {
-    if (!selected) return;
-    /* ======================= BACKEND HOOK 3 of 5 =========================
-       Pause or resume the assistant on this thread.
-       Suggested route:  POST /leads/{id}/ai  body { paused: boolean }
-       Nothing like this exists yet. `service.receive` would read the flag
-       and return early instead of calling the LLM when it's true.
-       ===================================================================== */
-    if (onToggleAi) {
-      await onToggleAi({ leadId: selected.id, paused });
-      return;
-    }
-    // No onToggleAi passed in: update local state only, so the UI still reacts.
-    setLocalLeads((prev) =>
-      prev.map((l) => (l.id === selected.id ? { ...l, ai_paused: paused } : l))
-    );
-    appendLocal(selected.id, {
-      direction: "internal",
-      author: "system",
-      body: paused
-        ? "You took over. The assistant won't reply here until you hand it back."
-        : "Handed back to the assistant.",
-    });
+    if (!selected || !onToggleAi) return;
+    await onToggleAi({ leadId: selected.id, paused });
   }
 
   async function resolveHandoff() {
-    if (!selected) return;
-    /* BACKEND HOOK 5 of 5 */
-    if (onResolveLead) {
-      setResolving(true);
-      try {
-        await onResolveLead(selected.id);
-      } finally {
-        setResolving(false);
-      }
-      return;
+    if (!selected || !onResolveLead) return;
+    setResolving(true);
+    try {
+      await onResolveLead(selected.id);
+    } finally {
+      setResolving(false);
     }
-    // No onResolveLead passed in: clear the flag locally only.
-    setLocalLeads((prev) =>
-      prev.map((l) => (l.id === selected.id ? { ...l, human_required: false } : l))
-    );
   }
 
   async function send() {
     const body = draft.trim();
-    if (!body || !selected || sending) return;
+    if (!body || !selected || sending || !onSendMessage) return;
 
     if (selected.opted_out) {
       setError("This lead replied STOP. Messaging them is blocked.");
@@ -231,51 +191,13 @@ export default function ConversationsPage({
     setSending(true);
     setError("");
     try {
-      /* BACKEND HOOK 4 of 5 */
-      if (onSendMessage) {
-        await onSendMessage({ leadId: selected.id, body });
-      } else {
-        // No onSendMessage passed in: reflect the send locally only
-        appendLocal(selected.id, { direction: "outbound", author: "staff", body });
-        /* Sending while the assistant is live pauses it automatically. prevent race conditions */
-        if (!selected.ai_paused) {
-          setLocalLeads((prev) =>
-            prev.map((l) =>
-              l.id === selected.id ? { ...l, ai_paused: true, human_required: false } : l
-            )
-          );
-          appendLocal(selected.id, {
-            direction: "internal",
-            author: "system",
-            body: "You took over. The assistant won't reply here until you hand it back.",
-          });
-        }
-      }
+      await onSendMessage({ leadId: selected.id, body });
       setDraft("");
     } catch {
       setError("Message failed to send. Check connection and try again");
     } finally {
       setSending(false);
     }
-  }
-
-  // Only touches local fallback state.
-  function appendLocal(leadId: string, partial: Omit<Message, "id" | "lead_id" | "created_at">) {
-    setLocalMessages((prev) => {
-      const list = prev[leadId] ?? [];
-      return {
-        ...prev,
-        [leadId]: [
-          ...list,
-          {
-            id: String(Date.now() + Math.random()),
-            lead_id: leadId,
-            created_at: new Date().toISOString(),
-            ...partial,
-          },
-        ],
-      };
-    });
   }
 
   function onComposerKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
