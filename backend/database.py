@@ -34,12 +34,6 @@ class LeadStage(str, Enum):
     DO_NOT_CONTACT = "do_not_contact"
 
 
-class Direction(str, Enum):
-    INBOUND = "inbound"
-    OUTBOUND = "outbound"
-    INTERNAL = "internal"
-
-
 class Lead(Base):
     __tablename__ = "leads"
 
@@ -70,6 +64,11 @@ class Author(str, Enum):
     ASSISTANT = "assistant"
     STAFF = "staff"
     SYSTEM = "system"
+
+class Direction(str, Enum):
+    INBOUND = "inbound"
+    OUTBOUND = "outbound"
+    INTERNAL = "internal"
 
 
 class Message(Base):

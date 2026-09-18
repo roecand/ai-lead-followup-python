@@ -1,23 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { API_BASE } from "../api/client";
 
-/**
- * LoginPage
- * ---------------------------------------------------------------------------
- * Self-contained sign-in screen. No Tailwind / UI library required.
- *
- * WHERE YOU HOOK UP THE BACKEND  -> search for "BACKEND HOOK" below.
- * There are two of them: email/password, and Google.
- *
- * The component takes two optional props so you can wire it up without
- * editing this file at all:
- *
- *   onSignIn({ email, password, remember })  -> should throw on failure
- *   onGoogleSignIn()                         -> should throw on failure
- *
- * If you don't pass them, the TODO blocks inside run instead.
- * ---------------------------------------------------------------------------
- */
 export default function LoginPage({
   onSignIn,
   onGoogleSignIn,
@@ -49,7 +33,7 @@ export default function LoginPage({
       if (onSignIn) {
         await onSignIn({ email: email.trim(), password, remember });
       } else {
-          const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/login`, {
+          const response = await fetch(`${API_BASE}/auth/login`, {
               method: "POST",
               credentials: "include",
               headers: { "Content-Type": "application/json" },

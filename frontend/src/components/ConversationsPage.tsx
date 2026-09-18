@@ -1,30 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-/* ===========================================================================
-   ConversationsPage
-   ---------------------------------------------------------------------------
-   Staff inbox. Pick a lead on the left, read the whole AI/customer thread,
-   send your own messages into it, and pause the assistant when you step in.
-
-   Self-contained. No Tailwind, no UI library, no icon package.
-   Every class is prefixed .gs- so nothing leaks into the rest of your app.
-
-   WHERE YOU HOOK UP THE BACKEND -> search for "BACKEND HOOK".
-   There are five of them, numbered, each with the route it maps to.
-
-   This component holds NO data of its own. Everything it shows comes from
-   the `leads` / `messagesByLead` props. Render it with no props and it just
-   shows an empty inbox, on purpose, there's nothing here to fall back to.
-   Wire up a parent component that fetches from your API and passes the
-   result down, see the BACKEND HOOK comments for exactly what each prop
-   needs to do.
-   =========================================================================== */
-
-/* ---------------------------------------------------------------------------
-   TYPES
-   These mirror your LeadView / MessageView in schemas.py, with two additions
-   that your backend does NOT have yet. Both are noted where they're used.
---------------------------------------------------------------------------- */
+// TYPES
 
 export type Stage =
   | "new" | "contacted" | "engaged" | "qualified"
@@ -32,15 +8,11 @@ export type Stage =
 
 export type Direction = "inbound" | "outbound" | "internal";
 
-/** NEW FIELD, not in your Message model yet.
- *  Right now every outbound row is written by the assistant, so there's no way
- *  to tell an AI message apart from one a person typed. You'll want a column
- *  for this on `messages` before this page means anything real. */
 export type Author = "customer" | "assistant" | "staff" | "system";
 
 export interface Message {
-  id: number;
-  lead_id: number;
+  id: string;
+  lead_id: string;
   direction: Direction;
   author: Author;
   body: string;
@@ -50,7 +22,7 @@ export interface Message {
 }
 
 export interface Lead {
-  id: number;
+  id: string;
   first_name: string | null;
   phone: string;
   source: string;
@@ -64,25 +36,17 @@ export interface Lead {
 }
 
 interface ConversationsPageProps {
-  /** The lead list for the rail. Fetch this from your API in a parent
-   *  component and pass it down, see BACKEND HOOK 1. */
   leads?: Lead[];
-  /** One message array per lead id. Fetch a thread when it's opened (hook 2)
-   *  and keep accumulating them here as the user clicks around. */
   messagesByLead?: Record<number, Message[]>;
-  onSelectLead?: (leadId: number) => void | Promise<void>;
-  onSendMessage?: (args: { leadId: number; body: string }) => void | Promise<void>;
-  onToggleAi?: (args: { leadId: number; paused: boolean }) => void | Promise<void>;
+  onSelectLead?: (leadId: string) => void | Promise<void>;
+  onSendMessage?: (args: { leadId: string; body: string }) => void | Promise<void>;
+  onToggleAi?: (args: { leadId: string; paused: boolean }) => void | Promise<void>;
   /** Shown on staff-authored messages. Swap for the signed-in user's name. */
   staffName?: string;
+  pendingAiToggles?: Set<string>;
 }
 
-/* ---------------------------------------------------------------------------
-   LAYOUT CONSTANTS
-   The rail is drag-resizable. Drag its right edge. Pull it left of SNAP_BELOW
-   and it collapses to a compact strip of initials; drag it back out to return.
-   Double-click the edge to reset to the default width.
---------------------------------------------------------------------------- */
+// LAYOUT CONSTANTS
 const RAIL_DEFAULT = 320;
 const RAIL_MIN = 240;
 const RAIL_MAX = 520;
@@ -100,34 +64,26 @@ export default function ConversationsPage({
   onSendMessage,
   onToggleAi,
   staffName = "You",
+  pendingAiToggles,
 }: ConversationsPageProps) {
   /* --- data -----------------------------------------------------------------
-     No local data lives here. `leadsProp` / `messagesProp` are what a parent
-     component passes in from your API. If nothing is passed, these default
-     to empty, on purpose, there's no demo data to fall back to anymore.
-
      Local state below is used only for OPTIMISTIC UI, e.g. showing a message
      the instant you hit send, before your backend has confirmed it. If you'd
      rather always wait on the server response, you can drop the local
      appendLocal() calls and rely entirely on messagesProp updating.
 
-     ======================= BACKEND HOOK 1 of 5 =========================
-     Load the lead list.  GET /leads  (or your company-scoped version,
-     e.g. GET /companies/{company_id}/leads)
-     Fetch this in a parent component and pass the result as the `leads` prop.
-     Poll it, or push updates over a websocket if you'd rather.
-     ===================================================================== */
+     Hook 1
+*/
   const [localLeads, setLocalLeads] = useState<Lead[]>([]);
-  const [localMessages, setLocalMessages] =
-    useState<Record<number, Message[]>>({});
+  const [localMessages, setLocalMessages] = useState<Record<string, Message[]>>({});
 
   const leads = leadsProp ?? localLeads;
   const messagesByLead = messagesProp ?? localMessages;
 
   /* --- selection and filtering -------------------------------------------- */
   // The user's explicit pick, if they've made one. Starts unset.
-  const [selectedIdOverride, setSelectedId] = useState<number | null>(null);
-  const [filter, setFilter] = useState<"all" | "needs_you">("all");
+  const [selectedIdOverride, setSelectedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "needs_you" | "paused">("all");
   const [query, setQuery] = useState("");
 
   /* --- rail sizing --------------------------------------------------------- */
@@ -145,10 +101,7 @@ export default function ConversationsPage({
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  /* If nothing's been explicitly picked yet, fall back to the first lead.
-     This is computed fresh every render rather than synced via an effect,
-     so there's no extra render or setState-in-effect involved, and it stays
-     correct automatically once `leads` arrives async. */
+  /* If nothing's been explicitly picked yet, fall back to the first lead. */
   const selectedId =
     selectedIdOverride != null && leads.some((l) => l.id === selectedIdOverride)
       ? selectedIdOverride
@@ -157,11 +110,14 @@ export default function ConversationsPage({
   const selected = leads.find((l) => l.id === selectedId) ?? null;
   const thread = selectedId != null ? messagesByLead[selectedId] ?? [] : [];
   const needsYouCount = leads.filter((l) => l.human_required).length;
+  const pausedCount = leads.filter((l) => l.ai_paused).length;
 
   const visibleLeads = useMemo(() => {
     const q = query.trim().toLowerCase();
     return leads
-      .filter((l) => (filter === "needs_you" ? l.human_required : true))
+      .filter((l) =>
+        filter === "needs_you" ? l.human_required : filter === "paused" ? l.ai_paused : true
+      )
       .filter((l) =>
         !q
           ? true
@@ -174,15 +130,14 @@ export default function ConversationsPage({
       });
   }, [leads, messagesByLead, filter, query]);
 
+  const aiTogglePending = pendingAiToggles?.has(selected?.id ?? "") ?? false;
   /* Stick to the bottom of the thread on open and on every new message. */
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [selectedId, thread.length]);
 
-  /* Drag-to-resize. Pointer events cover mouse, trackpad, and touch in one go.
-     Listeners live on window so the drag survives the cursor leaving the
-     handle, which is what makes fast drags feel right instead of sticky. */
+  // Drag-to-resize. Pointer events cover mouse, trackpad, and touch in one go.
   useEffect(() => {
     if (!dragging) return;
 
@@ -210,17 +165,11 @@ export default function ConversationsPage({
     };
   }, [dragging]);
 
-  async function pickLead(id: number) {
+  async function pickLead(id: string) {
     setSelectedId(id);
     setDraft("");
     setError("");
-    /* ======================= BACKEND HOOK 2 of 5 =========================
-       Load one thread.  GET /leads/{id}/messages
-       That route already exists in main.py and returns MessageView[].
-       Have this callback fetch it and merge the result into whatever state
-       backs your `messagesByLead` prop. If you keep every thread loaded up
-       front instead, you can skip passing onSelectLead entirely.
-       ===================================================================== */
+    // BACKEND HOOK 2 of 5
     if (onSelectLead) await onSelectLead(id);
   }
 
@@ -236,8 +185,7 @@ export default function ConversationsPage({
       await onToggleAi({ leadId: selected.id, paused });
       return;
     }
-    // No onToggleAi passed in: update local state only, so the UI still
-    // reacts. Once you wire the real handler this branch stops running.
+    // No onToggleAi passed in: update local state only, so the UI still reacts.
     setLocalLeads((prev) =>
       prev.map((l) => (l.id === selected.id ? { ...l, ai_paused: paused } : l))
     );
@@ -262,22 +210,13 @@ export default function ConversationsPage({
     setSending(true);
     setError("");
     try {
-      /* ======================= BACKEND HOOK 4 of 5 =========================
-         Send a staff-authored SMS into this thread.
-         Suggested route:  POST /leads/{id}/messages  body { body: string }
-         It should call sms.send(), write a Message row with author="staff"
-         and direction="outbound", and re-check opted_out at send time the
-         same way run_due_followups does before it sends anything.
-         ===================================================================== */
+      /* BACKEND HOOK 4 of 5 */
       if (onSendMessage) {
         await onSendMessage({ leadId: selected.id, body });
       } else {
-        // No onSendMessage passed in: reflect the send locally only, so the
-        // composer still visibly does something while you're wiring things up.
+        // No onSendMessage passed in: reflect the send locally only
         appendLocal(selected.id, { direction: "outbound", author: "staff", body });
-        /* Sending while the assistant is live pauses it automatically. The
-           alternative is two replies racing each other in the customer's
-           thread. If you'd rather make it an explicit choice, drop this. */
+        /* Sending while the assistant is live pauses it automatically. prevent race conditions */
         if (!selected.ai_paused) {
           setLocalLeads((prev) =>
             prev.map((l) =>
@@ -293,16 +232,14 @@ export default function ConversationsPage({
       }
       setDraft("");
     } catch {
-      setError("That didn't send. Check the connection and try again.");
+      setError("Message failed to send. Check connection and try again");
     } finally {
       setSending(false);
     }
   }
 
-  /** Only touches local fallback state. Once real props are wired up your
-   *  own `onSendMessage` / `onToggleAi` handlers are what update
-   *  `messagesByLead`, this function stops being called at all. */
-  function appendLocal(leadId: number, partial: Omit<Message, "id" | "lead_id" | "created_at">) {
+  // Only touches local fallback state.
+  function appendLocal(leadId: string, partial: Omit<Message, "id" | "lead_id" | "created_at">) {
     setLocalMessages((prev) => {
       const list = prev[leadId] ?? [];
       return {
@@ -310,7 +247,7 @@ export default function ConversationsPage({
         [leadId]: [
           ...list,
           {
-            id: Date.now() + Math.random(),
+            id: String(Date.now() + Math.random()),
             lead_id: leadId,
             created_at: new Date().toISOString(),
             ...partial,
@@ -334,11 +271,10 @@ export default function ConversationsPage({
     <div className="gs-root">
       <style>{CSS}</style>
 
-      {/* Decorative paper grain. Delete it and the page still works. */}
       <div className="gs-grain" aria-hidden="true" />
 
       {/* -----------------------------------------------------------------
-          HEADER. If you already have app chrome, delete this whole block
+          HEADER. If already have app chrome, delete this later
           and the .gs-body top padding goes with it.
       ------------------------------------------------------------------ */}
       <header className="gs-top">
@@ -365,10 +301,7 @@ export default function ConversationsPage({
       </header>
 
       <div className="gs-body">
-        {/* ---------------------------------------------------------------
-            LEFT RAIL. Width is inline because it's dragged, everything
-            else about it lives in the stylesheet.
-        ---------------------------------------------------------------- */}
+        {/* LEFT RAIL. */}
         <aside
           className={"gs-rail" + (compact ? " is-compact" : "")}
           style={{ width: railWidth }}
@@ -402,6 +335,16 @@ export default function ConversationsPage({
                   Needs you
                   {needsYouCount > 0 && <span className="gs-count">{needsYouCount}</span>}
                 </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={filter === "paused"}
+                  className={"gs-filter" + (filter === "paused" ? " is-on" : "")}
+                  onClick={() => setFilter("paused")}
+                >
+                  Paused
+                  {pausedCount > 0 && <span className="gs-count">{pausedCount}</span>}
+                </button>
               </div>
             </div>
           )}
@@ -411,6 +354,8 @@ export default function ConversationsPage({
               <p className="gs-empty-rail">
                 {filter === "needs_you"
                   ? "No one is waiting on a person right now."
+                  : filter === "paused"
+                  ? "No conversations are paused right now."
                   : leads.length === 0
                   ? "No conversations loaded yet."
                   : "No conversations match that search."}
@@ -463,9 +408,7 @@ export default function ConversationsPage({
           </div>
         </aside>
 
-        {/* ---------------------------------------------------------------
-            DRAG HANDLE. Wider hit area than it looks, so it's catchable.
-        ---------------------------------------------------------------- */}
+        {/* DRAG HANDLE. */}
         <div
           className={"gs-handle" + (dragging ? " is-dragging" : "")}
           onPointerDown={(e) => {
@@ -478,7 +421,7 @@ export default function ConversationsPage({
           aria-label="Resize conversation list"
           tabIndex={0}
           onKeyDown={(e) => {
-            // Keyboard resize, since a drag handle is unreachable otherwise.
+            // Keyboard resize
             if (e.key === "ArrowLeft")
               setRailWidth((w) => (w <= RAIL_MIN ? RAIL_COMPACT : Math.max(RAIL_MIN, w - 24)));
             if (e.key === "ArrowRight")
@@ -488,9 +431,7 @@ export default function ConversationsPage({
           <span className="gs-handle-grip" aria-hidden="true" />
         </div>
 
-        {/* ---------------------------------------------------------------
-            CENTER. Thread and composer.
-        ---------------------------------------------------------------- */}
+        {/* CENTER. Thread and composer. */}
         <main className="gs-thread">
           {!selected ? (
             <div className="gs-empty">
@@ -521,6 +462,7 @@ export default function ConversationsPage({
                     type="button"
                     className="gs-takeover"
                     onClick={() => setAiPaused(!selected.ai_paused)}
+                    disabled={ aiTogglePending }
                   >
                     {selected.ai_paused ? "Give back to assistant" : "Take over"}
                   </button>
@@ -590,7 +532,7 @@ export default function ConversationsPage({
                 </div>
               </div>
 
-              {/* --- COMPOSER --- */}
+              {/* COMPOSER */}
               <div className="gs-composer">
                 {blocked ? (
                   <p className="gs-blocked">
@@ -641,9 +583,7 @@ export default function ConversationsPage({
           )}
         </main>
 
-        {/* ---------------------------------------------------------------
-            RIGHT DETAIL PANEL.
-        ---------------------------------------------------------------- */}
+        { /* RIGHT DETAIL PANEL. */ }
         {selected && showDetail && (
           <aside className="gs-detail">
             <dl className="gs-facts">
@@ -1086,6 +1026,13 @@ const CSS = `
   border-color: var(--green);
   color: var(--green);
   background: var(--green-wash);
+}
+.gs-takeover:disabled {
+  opacity: 0.45;
+  cursor: default;
+  border-color: var(--line);
+  color: var(--ink-dim);
+  background: none;
 }
 
 .gs-ghost {

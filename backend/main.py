@@ -7,11 +7,22 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .database import Lead, Message, SessionLocal, create_schema, User, RefreshToken, Company
+from .database import Lead, Message, SessionLocal, create_schema, User, RefreshToken, Company, Direction, Author
 from .followups import run_due_followups
 from .knowledge import load_knowledge
 from .llm import build_gateway
-from .schemas import DemoInbound, LeadCreate, LeadView, MessageView, ProcessResult, LoginRequest, SignupRequest
+from .schemas import (
+    DemoInbound,
+    LeadCreate,
+    LeadView,
+    MessageView,
+    ProcessResult,
+    LoginRequest,
+    SignupRequest,
+    CreateCompany,
+    SetAiPaused,
+    SendMessageRequest,
+)
 from .service import ConversationService
 from .sms import build_sms_gateway
 
@@ -68,7 +79,7 @@ def health() -> dict[str, str]:
 # Create lead
 @app.post("/leads", response_model=LeadView, status_code=201)
 def create_lead(payload: LeadCreate, db: Session = Depends(get_db)) -> Lead:
-    existing = db.scalar(select(Lead).where(Lead.phone == payload.phone))
+    existing = db.scalar(select(Lead).where(Lead.phone == payload.phone, Lead.company_id == payload.company_id))
     if existing:
         raise HTTPException(409, "A lead with this phone already exists")
     lead = Lead(**payload.model_dump())
@@ -87,11 +98,6 @@ def get_lead(lead_id: uuid.UUID, db: Session = Depends(get_db)) -> Lead:
     return lead
 
 
-@app.get("/company/{company_id}/leads", response_model=list[LeadView])
-def list_leads(company_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Lead]:
-    return list(db.scalars(select(Lead).where(company_id == Lead.company_id).order_by(Lead.updated_at.desc())))
-
-
 # Gets conversation between lead given the lead_id
 @app.get("/leads/{lead_id}/messages", response_model=list[MessageView])
 def get_conversation(lead_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Message]:
@@ -100,6 +106,31 @@ def get_conversation(lead_id: uuid.UUID, db: Session = Depends(get_db)) -> list[
     return list(db.scalars(
         select(Message).where(Message.lead_id == lead_id).order_by(Message.created_at)
     ))
+
+@app.post("/leads/{lead_id}/messages", response_model=MessageView, status_code=201)
+async def send_staff_message(lead_id:uuid.UUID, payload: SendMessageRequest, db: Session = Depends(get_db)) -> Message:
+    lead = db.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if lead.opted_out or not lead.consent_to_sms:
+        raise HTTPException(409, "This lead may not be messaged")
+
+    if not lead.ai_paused:
+        lead.ai_paused = True
+        lead.human_required = False
+        db.add(Message(lead_id=lead_id, direction=Direction.INTERNAL, author=Author.SYSTEM,
+                          body="You took over. The assistant won't reply here until you hand it back."))
+
+    # Need to add retry if message fails to send and sent, delivered, read, and failed reciepts later
+    receipt = await sms_gateway.send(lead.phone, lead.company.twilio_number, payload.body)
+
+    message = Message(lead_id=lead_id, direction=Direction.OUTBOUND, body=payload.body,
+                      provider_id=receipt.provider_id, author=Author.STAFF)
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+
+    return message
 
 
 # Sends first outbound message
@@ -157,7 +188,7 @@ async def auth_login(payload: LoginRequest, response: Response, db: Session = De
 
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
     access_token = jwt.encode(
-        {"user_id": user.id, "exp": expires_at},
+        {"user_id": str(user.id), "exp": expires_at},
         get_settings().jwt_secret,
         algorithm="HS256",
     )
@@ -166,7 +197,7 @@ async def auth_login(payload: LoginRequest, response: Response, db: Session = De
     refresh_value = secrets.token_hex(32)
     refresh_expires = datetime.now(timezone.utc) + refresh_lifetime
 
-    db.add(RefreshToken(user_id=str(user.id), token=refresh_value, expires_at=refresh_expires,))
+    db.add(RefreshToken(user_id=user.id, token=refresh_value, expires_at=refresh_expires,))
     db.commit()
 
     response.set_cookie(
@@ -239,6 +270,54 @@ async def insert_user(payload: SignupRequest, db: Session = Depends(get_db)) -> 
     db.commit()
     db.refresh(user)
 
-# @app.post("/admin/create_company", status_code=204)
-# async def create_company(payload: SignupRequest, db: Session = Depends(get_db)) -> None:
+@app.post("/admin/create_company", status_code=201)
+async def create_company(payload: CreateCompany, db: Session = Depends(get_db)) -> dict:
+    existing = db.scalar(select(Company).where(Company.twilio_number == payload.twilio_number))
+    if existing:
+        raise HTTPException(409, "Company with this twilio number already exists")
 
+    company = Company(name=payload.name, twilio_number=payload.twilio_number, timezone=payload.timezone)
+
+    db.add(company)
+    db.commit()
+    db.refresh(company)
+
+    return {"id": str(company.id), "name": company.name, "join_code": company.join_code, "twilio_number": company.twilio_number}
+
+
+# main.py
+
+def get_current_user(db: Session = Depends(get_db), token: str | None = Cookie(default=None)) -> User:
+    if not token:
+        raise HTTPException(401, "Not authenticated")
+    try:
+        payload = jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Invalid or expired token")
+
+    user = db.get(User, uuid.UUID(payload["user_id"]))
+    if not user:
+        raise HTTPException(401, "User not found")
+    return user
+
+
+@app.get("/auth/me")
+def get_me(user: User = Depends(get_current_user)) -> dict:
+    return {"user_id": str(user.id), "email": user.email, "company_id": str(user.company_id)}
+
+
+@app.get("/company/leads", response_model=list[LeadView])
+def list_leads(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[Lead]:
+    return list(db.scalars(
+        select(Lead).where(Lead.company_id == user.company_id).order_by(Lead.updated_at.desc())
+    ))
+
+@app.post("/leads/{lead_id}/ai", status_code=204)
+def pause_ai(lead_id: uuid.UUID, payload: SetAiPaused, db: Session = Depends(get_db)) -> None:
+    lead = db.scalar(select(Lead).where(Lead.id == lead_id))
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+
+    lead.ai_paused = payload.paused
+
+    db.commit()

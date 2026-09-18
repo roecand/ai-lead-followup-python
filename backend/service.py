@@ -53,10 +53,9 @@ class ConversationService:
         db.commit()
         return ProcessResult(lead_id=lead.id, action="replied", reply=greeting)
 
-    async def receive(
-        self, db: Session, company: Company, phone: str, body: str, provider_id: str | None = None
-    ) -> ProcessResult:
+    async def receive(self, db: Session, company: Company, phone: str, body: str, provider_id: str | None = None) -> ProcessResult:
         normalized = body.strip()
+
         lead = db.scalar(select(Lead).where(Lead.phone == phone, Lead.company_id == company.id))
         if lead is None:
             lead = Lead(phone=phone, source="inbound_demo", consent_to_sms=True, company_id=company.id, company=company)

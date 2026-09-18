@@ -8,6 +8,7 @@ import uuid
 
 class LeadCreate(BaseModel):
     phone: str
+    company_id: uuid.UUID
     first_name: str | None = None
     source: str = "manual_demo"
     consent_to_sms: bool = True
@@ -67,6 +68,9 @@ class MessageView(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SendMessageRequest(BaseModel):
+    body: str
+
 class ProcessResult(BaseModel):
     lead_id: uuid.UUID
     action: Literal["replied", "opted_out", "duplicate", "human_handoff", "ignored"]
@@ -82,3 +86,12 @@ class SignupRequest(BaseModel):
     email: str
     password: str
     join_code: str
+
+class CreateCompany(BaseModel):
+    name: str
+    twilio_number: str
+    timezone: str = "America/Los_Angeles"
+
+class SetAiPaused(BaseModel):
+    paused: bool
+
