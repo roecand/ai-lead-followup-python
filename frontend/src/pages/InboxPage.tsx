@@ -23,7 +23,7 @@ export default function InboxPage() {
       .then(setUser);
   }, []);
 
-  // Pull the user's company's leads
+  // 1. Pull the user's company's leads
   useEffect(() => {
     if (!user) return;
     apiFetch('/company/leads')
@@ -31,7 +31,7 @@ export default function InboxPage() {
       .then(setLeads);
   }, [user]);
 
-
+  // 2 Load messages
   async function loadThread(leadId: string) {
     if (messagesByLead[leadId]) return; // Lead messages already loaded
     const res = await apiFetch(`/leads/${leadId}/messages`);
@@ -50,10 +50,10 @@ export default function InboxPage() {
     .then((messages) => {
       setMessagesByLead((prev) => ({ ...prev, [firstId]: messages }));
     });
-}, [leads]);
 
+  }, [leads]);
 
-  // 3
+  // 3 toggle ai off and on
   async function toggleAi({ leadId, paused }: { leadId: string; paused: boolean }) {
     if (pendingAiToggle.has(leadId)) return; // already mid-toggle, ignore click
 
@@ -82,7 +82,7 @@ export default function InboxPage() {
     }
   }
 
-  // 4
+  // 4 send staff message
   async function sendMessage({ leadId, body }: {leadId: string, body: string }){
     if(!messagesByLead[leadId]) return; // lead messages not loaded yet. unlikely to happen, but safety check
     const tempId = `temp-${Date.now()}-${Math.random()}`;
@@ -132,6 +132,15 @@ export default function InboxPage() {
     }
   }
 
+  // 5 resolve lead with button press
+  async function resolveLead(leadId: string) {
+    const res = await apiFetch(`/leads/${leadId}/resolve`, { method: "POST" });
+
+    if (!res.ok) throw new Error("Failed to resolve. Check connection.");
+
+    const updated = await res.json();
+    setLeads((prev) => prev.map((lead) => (lead.id === leadId ? updated : lead)));
+  }
 
   return <ConversationsPage
       leads={leads}
@@ -140,5 +149,6 @@ export default function InboxPage() {
       onToggleAi={toggleAi}
       pendingAiToggles={pendingAiToggle}
       onSendMessage={sendMessage}
+      onResolveLead={resolveLead}
   />;
 }

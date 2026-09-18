@@ -41,6 +41,7 @@ interface ConversationsPageProps {
   onSelectLead?: (leadId: string) => void | Promise<void>;
   onSendMessage?: (args: { leadId: string; body: string }) => void | Promise<void>;
   onToggleAi?: (args: { leadId: string; paused: boolean }) => void | Promise<void>;
+  onResolveLead?: (leadId: string) => void | Promise<void>;
   /** Shown on staff-authored messages. Swap for the signed-in user's name. */
   staffName?: string;
   pendingAiToggles?: Set<string>;
@@ -63,6 +64,7 @@ export default function ConversationsPage({
   onSelectLead,
   onSendMessage,
   onToggleAi,
+  onResolveLead,
   staffName = "You",
   pendingAiToggles,
 }: ConversationsPageProps) {
@@ -95,6 +97,7 @@ export default function ConversationsPage({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [resolving, setResolving] = useState(false);
 
   /* --- detail panel -------------------------------------------------------- */
   const [showDetail, setShowDetail] = useState(true);
@@ -196,6 +199,24 @@ export default function ConversationsPage({
         ? "You took over. The assistant won't reply here until you hand it back."
         : "Handed back to the assistant.",
     });
+  }
+
+  async function resolveHandoff() {
+    if (!selected) return;
+    /* BACKEND HOOK 5 of 5 */
+    if (onResolveLead) {
+      setResolving(true);
+      try {
+        await onResolveLead(selected.id);
+      } finally {
+        setResolving(false);
+      }
+      return;
+    }
+    // No onResolveLead passed in: clear the flag locally only.
+    setLocalLeads((prev) =>
+      prev.map((l) => (l.id === selected.id ? { ...l, human_required: false } : l))
+    );
   }
 
   async function send() {
@@ -614,12 +635,17 @@ export default function ConversationsPage({
               </div>
             )}
 
-            {/* ======================= BACKEND HOOK 5 of 5 =====================
-                Clearing the handoff flag.  Suggested route:
-                POST /leads/{id}/resolve  which sets human_required = false.
-                Right now only _apply_decision ever writes that column, so a
-                flagged lead stays flagged forever once staff has dealt with it.
-                ================================================================ */}
+            {selected.human_required && (
+              <button
+                type="button"
+                className="gs-takeover"
+                style={{ marginTop: 10 }}
+                onClick={resolveHandoff}
+                disabled={resolving}
+              >
+                {resolving ? "Marking resolved…" : "Mark resolved"}
+              </button>
+            )}
           </aside>
         )}
       </div>

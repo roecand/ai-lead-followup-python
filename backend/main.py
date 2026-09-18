@@ -132,6 +132,18 @@ async def send_staff_message(lead_id:uuid.UUID, payload: SendMessageRequest, db:
 
     return message
 
+@app.post("/leads/{lead_id}/resolve", response_model=LeadView)
+def resolve_handoff(lead_id: uuid.UUID, db: Session = Depends(get_db)) -> Lead:
+    lead = db.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+
+    lead.human_required = False
+    db.commit()
+    db.refresh(lead)
+
+    return lead
+
 
 # Sends first outbound message
 @app.post("/leads/{lead_id}/start", response_model=ProcessResult)
