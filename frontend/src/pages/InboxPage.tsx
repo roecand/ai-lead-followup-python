@@ -3,33 +3,18 @@ import type { Lead, Message } from "../components/ConversationsPage";
 import ConversationsPage from "../components/ConversationsPage";
 import { apiFetch } from "../api/client";
 
-interface Me {
-  user_id: string;
-  email: string;
-  company_id: string;
-}
-
-
 export default function InboxPage() {
-  const [user, setUser] = useState<Me | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [messagesByLead, setMessagesByLead] = useState<Record<string, Message[]>>({});
   const [pendingAiToggle, setPendingAiToggle] = useState<Set<string>>(new Set());
 
-  // Get current logged in user
-  useEffect(() => {
-    apiFetch('/auth/me')
-      .then((res) => res.json())
-      .then(setUser);
-  }, []);
 
   // 1. Pull the user's company's leads
   useEffect(() => {
-    if (!user) return;
     apiFetch('/company/leads')
       .then((res) => res.json())
       .then(setLeads);
-  }, [user]);
+  }, []);
 
   // 2 Load messages
   async function loadThread(leadId: string) {

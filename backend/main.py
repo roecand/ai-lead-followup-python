@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import Depends, FastAPI, Form, HTTPException, Cookie
+from fastapi import Depends, FastAPI, Form, HTTPException, Cookie, Header
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -71,125 +71,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# INTERNAL
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "mode": "demonstration"}
 
 
-# Create lead
-@app.post("/leads", response_model=LeadView, status_code=201)
-def create_lead(payload: LeadCreate, db: Session = Depends(get_db)) -> Lead:
-    existing = db.scalar(select(Lead).where(Lead.phone == payload.phone, Lead.company_id == payload.company_id))
-    if existing:
-        raise HTTPException(409, "A lead with this phone already exists")
-    lead = Lead(**payload.model_dump())
-    db.add(lead)
-    db.commit()
-    db.refresh(lead)
-    return lead
+def decode_access_token(token: str | None) -> dict:
+    if not token:
+        raise HTTPException(401, "Not authenticated")
+    try:
+        return jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(401, "Expired token")
+    except jwt.InvalidTokenError:
+        raise HTTPException(401, "Invalid token")
 
+# main.py
 
-# Get lead by lead_id, basic int value. Should be changed to something other than just 1, 2, 3, ...
-@app.get("/leads/{lead_id}", response_model=LeadView)
-def get_lead(lead_id: uuid.UUID, db: Session = Depends(get_db)) -> Lead:
-    lead = db.get(Lead, lead_id)
-    if not lead:
-        raise HTTPException(404, "Lead not found")
-    return lead
+def get_current_user(db: Session = Depends(get_db), token: str | None = Cookie(default=None)) -> User:
+    payload = decode_access_token(token)
+    user = db.get(User, uuid.UUID(payload["user_id"]))
+    if not user:
+        raise HTTPException(401, "User not found")
+    return user
 
-
-# Gets conversation between lead given the lead_id
-@app.get("/leads/{lead_id}/messages", response_model=list[MessageView])
-def get_conversation(lead_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Message]:
-    if not db.get(Lead, lead_id):
-        raise HTTPException(404, "Lead not found")
-    return list(db.scalars(
-        select(Message).where(Message.lead_id == lead_id).order_by(Message.created_at)
-    ))
-
-@app.post("/leads/{lead_id}/messages", response_model=MessageView, status_code=201)
-async def send_staff_message(lead_id:uuid.UUID, payload: SendMessageRequest, db: Session = Depends(get_db)) -> Message:
-    lead = db.get(Lead, lead_id)
-    if not lead:
-        raise HTTPException(404, "Lead not found")
-    if lead.opted_out or not lead.consent_to_sms:
-        raise HTTPException(409, "This lead may not be messaged")
-
-    if not lead.ai_paused:
-        lead.ai_paused = True
-        lead.human_required = False
-        db.add(Message(lead_id=lead_id, direction=Direction.INTERNAL, author=Author.SYSTEM,
-                          body="You took over. The assistant won't reply here until you hand it back."))
-
-    # Need to add retry if message fails to send and sent, delivered, read, and failed reciepts later
-    receipt = await sms_gateway.send(lead.phone, lead.company.twilio_number, payload.body)
-
-    message = Message(lead_id=lead_id, direction=Direction.OUTBOUND, body=payload.body,
-                      provider_id=receipt.provider_id, author=Author.STAFF)
-    db.add(message)
-    db.commit()
-    db.refresh(message)
-
-    return message
-
-@app.post("/leads/{lead_id}/resolve", response_model=LeadView)
-def resolve_handoff(lead_id: uuid.UUID, db: Session = Depends(get_db)) -> Lead:
-    lead = db.get(Lead, lead_id)
-    if not lead:
-        raise HTTPException(404, "Lead not found")
-
-    lead.human_required = False
-    db.commit()
-    db.refresh(lead)
-
-    return lead
-
-
-# Sends first outbound message
-@app.post("/leads/{lead_id}/start", response_model=ProcessResult)
-async def start_conversation(lead_id: uuid.UUID, db: Session = Depends(get_db)) -> ProcessResult:
-    lead = db.get(Lead, lead_id)
-    if not lead:
-        raise HTTPException(404, "Lead not found")
-    return await service.start(db, lead)
-
-
-# Gets leads where human interjection is needed
-@app.get("/handoffs", response_model=list[LeadView])
-def handoff_queue(db: Session = Depends(get_db)) -> list[Lead]:
-    return list(db.scalars(
-        select(Lead).where(Lead.human_required.is_(True)).order_by(Lead.updated_at)
-    ))
-
-
-# Simulates inbound message
-@app.post("/demo/inbound", response_model=ProcessResult)
-async def demo_inbound(payload: DemoInbound, db: Session = Depends(get_db)) -> ProcessResult:
-    company = db.scalar(select(Company).where(Company.twilio_number == payload.company_phone))
-    if company is None:
-        raise HTTPException(404, "No company is registered for this number")
-    return await service.receive(db, company, payload.phone, payload.body, payload.provider_id)
-
-
-# Twilio inbound
-@app.post("/webhooks/twilio/inbound")
-async def twilio_inbound(
-    From: str = Form(...), To: str = Form(...), Body: str = Form(...), MessageSid: str = Form(...),
-    db: Session = Depends(get_db),
-) -> Response:
-    company = db.scalar(select(Company).where(Company.twilio_number == To))
-    if company is None:
-        raise HTTPException(404, "No company is registered for this number")
-    # Production TODO: validate Twilio's X-Twilio-Signature before processing.
-    await service.receive(db, company, From, Body, MessageSid)
-    return Response(content="<Response></Response>", media_type="application/xml")
-
-
-# Runs the follow up script
-@app.post("/admin/run-followups")
-async def trigger_followups() -> dict[str, int]:
-    # Production TODO: protect this route with admin authentication.
-    return {"sent": await run_due_followups(sms_gateway)}
 
 @app.post("/auth/login", status_code=204)
 async def auth_login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> None:
@@ -218,7 +124,7 @@ async def auth_login(payload: LoginRequest, response: Response, db: Session = De
         httponly=True,
         secure=True,
         samesite="lax",
-        max_age=1800,
+        max_age=30,
     )
 
     response.set_cookie(
@@ -256,12 +162,18 @@ async def auth_refresh(response: Response, db: Session = Depends(get_db), refres
         httponly=True,
         secure=True,
         samesite="lax",
-        max_age=1800,
+        max_age=30,
     )
 
+
+def require_admin_key(x_admin_key: str = Header(...)) -> None:
+    if x_admin_key != get_settings().admin_secret:
+        raise HTTPException(403, "Not authorized")
+
 # Only admin can create an account for a client right now, though no admin checks are in place atm
+# INTERNAL
 @app.post("/admin/insert_user", status_code=204)
-async def insert_user(payload: SignupRequest, db: Session = Depends(get_db)) -> None:
+async def insert_user(payload: SignupRequest, db: Session = Depends(get_db), _: None = Depends(require_admin_key)) -> None:
     existing_user = db.scalar(select(User).where(User.email == payload.email))
 
     if existing_user:
@@ -282,8 +194,9 @@ async def insert_user(payload: SignupRequest, db: Session = Depends(get_db)) -> 
     db.commit()
     db.refresh(user)
 
+# INTERNAL
 @app.post("/admin/create_company", status_code=201)
-async def create_company(payload: CreateCompany, db: Session = Depends(get_db)) -> dict:
+async def create_company(payload: CreateCompany, db: Session = Depends(get_db), _: None = Depends(require_admin_key)) -> dict:
     existing = db.scalar(select(Company).where(Company.twilio_number == payload.twilio_number))
     if existing:
         raise HTTPException(409, "Company with this twilio number already exists")
@@ -296,26 +209,25 @@ async def create_company(payload: CreateCompany, db: Session = Depends(get_db)) 
 
     return {"id": str(company.id), "name": company.name, "join_code": company.join_code, "twilio_number": company.twilio_number}
 
-
-# main.py
-
-def get_current_user(db: Session = Depends(get_db), token: str | None = Cookie(default=None)) -> User:
-    if not token:
-        raise HTTPException(401, "Not authenticated")
-    try:
-        payload = jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
-    except jwt.PyJWTError:
-        raise HTTPException(401, "Invalid or expired token")
-
-    user = db.get(User, uuid.UUID(payload["user_id"]))
-    if not user:
-        raise HTTPException(401, "User not found")
-    return user
+# INTERNAL
+# Runs the follow up script
+@app.post("/admin/run-followups")
+async def trigger_followups(_: None = Depends(require_admin_key)) -> dict[str, int]:
+    # Production TODO: protect this route with admin authentication.
+    return {"sent": await run_due_followups(sms_gateway)}
 
 
-@app.get("/auth/me")
-def get_me(user: User = Depends(get_current_user)) -> dict:
-    return {"user_id": str(user.id), "email": user.email, "company_id": str(user.company_id)}
+# Create lead, INTERNAL, temp
+@app.post("/leads", response_model=LeadView, status_code=201)
+def create_lead(payload: LeadCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Lead:
+    existing = db.scalar(select(Lead).where(Lead.phone == payload.phone, Lead.company_id == user.company_id))
+    if existing:
+        raise HTTPException(409, "A lead with this phone already exists")
+    lead = Lead(**payload.model_dump(), company_id=user.company_id)
+    db.add(lead)
+    db.commit()
+    db.refresh(lead)
+    return lead
 
 
 @app.get("/company/leads", response_model=list[LeadView])
@@ -324,12 +236,99 @@ def list_leads(db: Session = Depends(get_db), user: User = Depends(get_current_u
         select(Lead).where(Lead.company_id == user.company_id).order_by(Lead.updated_at.desc())
     ))
 
-@app.post("/leads/{lead_id}/ai", status_code=204)
-def pause_ai(lead_id: uuid.UUID, payload: SetAiPaused, db: Session = Depends(get_db)) -> None:
-    lead = db.scalar(select(Lead).where(Lead.id == lead_id))
+
+# Gets leads where human interjection is needed
+@app.get("/handoffs", response_model=list[LeadView])
+def handoff_queue(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[Lead]:
+    return list(db.scalars(
+        select(Lead).where(Lead.human_required.is_(True), Lead.company_id == user.company_id).order_by(Lead.updated_at)
+    ))
+
+
+# Gets conversation between lead given the lead_id
+@app.get("/leads/{lead_id}/messages", response_model=list[MessageView])
+def get_conversation(lead_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[Message]:
+    lead = db.get(Lead, lead_id)
+    if not lead or lead.company_id != user.company_id:
+        raise HTTPException(404, "Lead not found")
+    return list(db.scalars(
+        select(Message).where(Message.lead_id == lead_id).order_by(Message.created_at)
+    ))
+
+@app.post("/leads/{lead_id}/messages", response_model=MessageView, status_code=201)
+async def send_staff_message(lead_id:uuid.UUID, payload: SendMessageRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Message:
+    lead = db.get(Lead, lead_id)
+    if not lead or lead.company_id != user.company_id:
+        raise HTTPException(404, "Lead not found")
+    if lead.opted_out or not lead.consent_to_sms:
+        raise HTTPException(409, "This lead may not be messaged")
+
+    if not lead.ai_paused:
+        lead.ai_paused = True
+        lead.human_required = False
+        db.add(Message(lead_id=lead_id, direction=Direction.INTERNAL, author=Author.SYSTEM,
+                          body="You took over. The assistant won't reply here until you hand it back."))
+
+    # Need to add retry if message fails to send and sent, delivered, read, and failed reciepts later
+    receipt = await sms_gateway.send(lead.phone, lead.company.twilio_number, payload.body)
+
+    message = Message(lead_id=lead_id, direction=Direction.OUTBOUND, body=payload.body,
+                      provider_id=receipt.provider_id, author=Author.STAFF)
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+
+    return message
+
+
+# Sends first outbound message
+# INTERNAL
+@app.post("/leads/{lead_id}/start", response_model=ProcessResult)
+async def start_conversation(lead_id: uuid.UUID, db: Session = Depends(get_db), _: None = Depends(require_admin_key)) -> ProcessResult:
+    lead = db.get(Lead, lead_id)
     if not lead:
+        raise HTTPException(404, "Lead not found")
+    return await service.start(db, lead)
+
+
+@app.post("/leads/{lead_id}/ai", status_code=204)
+def pause_ai(lead_id: uuid.UUID, payload: SetAiPaused, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> None:
+    lead = db.scalar(select(Lead).where(Lead.id == lead_id))
+    if not lead or lead.company_id != user.company_id:
         raise HTTPException(404, "Lead not found")
 
     lead.ai_paused = payload.paused
 
     db.commit()
+
+@app.post("/leads/{lead_id}/resolve", response_model=LeadView)
+def resolve_handoff(lead_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Lead:
+    lead = db.get(Lead, lead_id)
+    if not lead or lead.company_id != user.company_id:
+        raise HTTPException(404, "Lead not found")
+
+    lead.human_required = False
+    db.commit()
+    db.refresh(lead)
+
+    return lead
+
+
+# Simulates inbound message, INTERNAL
+@app.post("/demo/inbound", response_model=ProcessResult)
+async def demo_inbound(payload: DemoInbound, db: Session = Depends(get_db), _: None = Depends(require_admin_key)) -> ProcessResult:
+    company = db.scalar(select(Company).where(Company.twilio_number == payload.company_phone))
+    if company is None:
+        raise HTTPException(404, "No company is registered for this number")
+    return await service.receive(db, company, payload.phone, payload.body, payload.provider_id)
+
+
+# Twilio inbound
+@app.post("/webhooks/twilio/inbound")
+async def twilio_inbound(From: str = Form(...), To: str = Form(...), Body: str = Form(...), MessageSid: str = Form(...), db: Session = Depends(get_db),) -> Response:
+    company = db.scalar(select(Company).where(Company.twilio_number == To))
+    if company is None:
+        raise HTTPException(404, "No company is registered for this number")
+    # Production TODO: validate Twilio's X-Twilio-Signature before processing.
+    await service.receive(db, company, From, Body, MessageSid)
+    return Response(content="<Response></Response>", media_type="application/xml")

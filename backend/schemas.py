@@ -8,7 +8,6 @@ import uuid
 
 class LeadCreate(BaseModel):
     phone: str
-    company_id: uuid.UUID
     first_name: str | None = None
     source: str = "manual_demo"
     consent_to_sms: bool = True

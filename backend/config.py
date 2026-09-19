@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     quiet_hour_end: int = 8
     history_limit: int = 30
     jwt_secret: str
+    admin_secret: str
 
 
 @lru_cache
