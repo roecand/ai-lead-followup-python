@@ -124,7 +124,7 @@ async def auth_login(payload: LoginRequest, response: Response, db: Session = De
         httponly=True,
         secure=True,
         samesite="lax",
-        max_age=30,
+        max_age=1800,
     )
 
     response.set_cookie(
@@ -162,7 +162,7 @@ async def auth_refresh(response: Response, db: Session = Depends(get_db), refres
         httponly=True,
         secure=True,
         samesite="lax",
-        max_age=30,
+        max_age=1800,
     )
 
 
