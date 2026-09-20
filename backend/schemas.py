@@ -94,3 +94,12 @@ class CreateCompany(BaseModel):
 class SetAiPaused(BaseModel):
     paused: bool
 
+
+class GHLInboundPayload(BaseModel):
+    """TEMPORARY: shape of the custom JSON body configured in the GHL workflow's
+    webhook action. Delete alongside the GHL gateway."""
+    to: str
+    phone: str
+    message: str
+    message_id: str | None = None
+

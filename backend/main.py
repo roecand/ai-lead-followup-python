@@ -31,6 +31,7 @@ from .schemas import (
     CreateCompany,
     SetAiPaused,
     SendMessageRequest,
+    GHLInboundPayload, # Temporary for testing
 )
 from .service import ConversationService
 from .sms import build_sms_gateway
@@ -105,6 +106,26 @@ def get_current_user(db: Session = Depends(get_db), token: str | None = Cookie(d
         raise HTTPException(401, "User not found")
     return user
 
+# TEMPORARY: inbound bridge for GoHighLevel testing. Fed by a GHL Workflow's
+# "Webhook" action (Trigger: Customer Replied), not a native GHL app webhook —
+# GHL doesn't sign these, so a shared secret in the query string is the only
+# check we have. Delete this route when GHL testing is done.
+@app.post("/webhooks/ghl/inbound")
+async def ghl_inbound(
+    payload: GHLInboundPayload,
+    token: str,
+    db: Session = Depends(get_db),
+) -> Response:
+    settings = get_settings()
+    if not settings.ghl_webhook_secret or token != settings.ghl_webhook_secret:
+        raise HTTPException(403, "Not authorized")
+
+    company = db.scalar(select(Company).where(Company.twilio_number == payload.to))
+    if company is None:
+        raise HTTPException(404, "No company is registered for this number")
+
+    await service.receive(db, company, payload.phone, payload.message, payload.message_id)
+    return Response(status_code=204)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db), token: str = Cookie(default=None)) -> None:
