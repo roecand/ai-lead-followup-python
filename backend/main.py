@@ -1,10 +1,19 @@
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import Depends, FastAPI, Form, HTTPException, Cookie, Header
+from fastapi import Depends, FastAPI, Form, HTTPException, Cookie, Header, WebSocket, WebSocketDisconnect, \
+    WebSocketException
 from fastapi.responses import Response
+from fastapi.middleware.cors import CORSMiddleware
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+import uuid
+
+import jwt
+import secrets
+from datetime import datetime, timedelta, timezone
+from passlib.context import CryptContext
 
 from .config import get_settings
 from .database import Lead, Message, SessionLocal, create_schema, User, RefreshToken, Company, Direction, Author
@@ -25,15 +34,7 @@ from .schemas import (
 )
 from .service import ConversationService
 from .sms import build_sms_gateway
-
-from fastapi.middleware.cors import CORSMiddleware
-
-import jwt
-from datetime import datetime, timedelta, timezone
-from passlib.context import CryptContext
-import secrets
-
-import uuid
+from .connnection_manager import manager
 
 
 sms_gateway = build_sms_gateway()
@@ -87,7 +88,15 @@ def decode_access_token(token: str | None) -> dict:
     except jwt.InvalidTokenError:
         raise HTTPException(401, "Invalid token")
 
-# main.py
+
+def try_decode_access_token(token: str | None) -> dict:
+    if not token:
+        return None
+    try:
+        return jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
+    except:
+        return None
+
 
 def get_current_user(db: Session = Depends(get_db), token: str | None = Cookie(default=None)) -> User:
     payload = decode_access_token(token)
@@ -95,6 +104,22 @@ def get_current_user(db: Session = Depends(get_db), token: str | None = Cookie(d
     if not user:
         raise HTTPException(401, "User not found")
     return user
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db), token: str = Cookie(default=None)) -> None:
+    payload = try_decode_access_token(token)
+    user = db.get(User, uuid.UUID(payload["user_id"])) if payload else None
+    if not user:
+        await websocket.close(code=4401)
+        return
+
+    await manager.connect(user.company_id, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketException:
+        manager.disconnect(user.company_id, websocket)
 
 
 @app.post("/auth/login", status_code=204)

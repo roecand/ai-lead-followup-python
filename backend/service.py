@@ -10,6 +10,7 @@ from .knowledge import BusinessKnowledge
 from .llm import LLMGateway
 from .schemas import ProcessResult, ReplyDecision
 from .sms import SMSGateway
+from .connnection_manager import manager
 
 import uuid
 
@@ -30,20 +31,28 @@ class ConversationService:
             return ProcessResult(
                 lead_id=lead.id, action="ignored", reason="Documented SMS consent is required"
             )
+
+        # Check if conversation was already started
         prior_outbound = db.scalar(select(Message).where(
             Message.lead_id == lead.id, Message.direction == Direction.OUTBOUND
         ))
+
         if prior_outbound:
             return ProcessResult(
                 lead_id=lead.id, action="duplicate", reason="Conversation was already started"
             )
+
+        # Temp greeting
         greeting = f"Hi{f' {lead.first_name}' if lead.first_name else ''}, this is {self.knowledge.name}. How can we help? Reply STOP to opt out."
+
         company_twilio_phone = lead.company.twilio_number
         receipt = await self.sms.send(lead.phone, company_twilio_phone, greeting)
-        db.add(Message(
+
+        outbound_message = Message(
             lead_id=lead.id, direction=Direction.OUTBOUND, body=greeting,
             provider_id=receipt.provider_id, intent="initial_outreach", confidence="high",
-        ))
+        )
+        db.add(outbound_message)
         lead.stage = LeadStage.CONTACTED
         db.add(FollowUp(
             lead_id=lead.id,
@@ -51,6 +60,23 @@ class ConversationService:
             reason="No-response check-in after initial outreach",
         ))
         db.commit()
+        db.refresh(outbound_message)
+
+        await manager.broadcast(lead.company_id, {
+            "type": "new_message",
+            "lead_id": str(lead.id),
+            "message": {
+                "id": str(outbound_message.id),
+                "lead_id": str(lead.id),
+                "direction": "outbound",
+                "body": outbound_message.body,
+                "intent": outbound_message.intent,
+                "confidence": outbound_message.confidence,
+                "created_at": outbound_message.created_at.isoformat(),
+                "author": outbound_message.author.value,
+            },
+        })
+
         return ProcessResult(lead_id=lead.id, action="replied", reply=greeting)
 
     async def receive(self, db: Session, company: Company, phone: str, body: str, provider_id: str | None = None) -> ProcessResult:
@@ -114,10 +140,13 @@ class ConversationService:
         self._apply_decision(db, lead, decision)
         company_twilio_phone = lead.company.twilio_number
         receipt = await self.sms.send(lead.phone, company_twilio_phone, decision.reply)
-        db.add(Message(
+
+        outbound_message = Message(
             lead_id=lead.id, direction=Direction.OUTBOUND, body=decision.reply,
             provider_id=receipt.provider_id, intent=decision.intent, confidence=decision.confidence,
-        ))
+        )
+
+        db.add(outbound_message)
         if decision.follow_up_hours and not decision.needs_human:
             db.add(FollowUp(
                 lead_id=lead.id,
@@ -125,6 +154,23 @@ class ConversationService:
                 reason=f"Model-suggested follow-up after {decision.intent}",
             ))
         db.commit()
+        db.refresh(outbound_message)
+
+        await manager.broadcast(lead.company_id, {
+            "type" : "new_message",
+            "lead_id": str(lead.id),
+            "message": {
+                "id": str(outbound_message.id),
+                "lead_id": str(lead.id),
+                "direction": "outbound",
+                "body": outbound_message.body,
+                "intent": outbound_message.intent,
+                "confidence": outbound_message.confidence,
+                "created_at": outbound_message.created_at.isoformat(),
+                "author": outbound_message.author.value,
+            }
+        })
+
         return ProcessResult(
             lead_id=lead.id,
             action="human_handoff" if decision.needs_human else "replied",

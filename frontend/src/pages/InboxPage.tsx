@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Lead, Message } from "../components/ConversationsPage";
 import ConversationsPage from "../components/ConversationsPage";
-import { apiFetch } from "../api/client";
+import { apiFetch, WS_BASE } from "../api/client";
 
 export default function InboxPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -14,6 +14,22 @@ export default function InboxPage() {
     apiFetch('/company/leads')
       .then((res) => res.json())
       .then(setLeads);
+  }, []);
+
+  useEffect(() => {
+    const ws = new WebSocket(`${WS_BASE}/ws`)
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      if (data.type == "new_message") {
+        setMessagesByLead((prev) => {
+        if (!prev[data.lead_id]) return prev;
+        return { ...prev, [data.lead_id]: [...prev[data.lead_id], data.message] };
+        });
+      }
+    };
+
+      return () => ws.close();
   }, []);
 
   // 2 Load messages
