@@ -16,7 +16,7 @@ async def run_due_followups(sms: SMSGateway) -> int:
         )))
         for item in due:
             lead = db.get(Lead, item.lead_id)
-            if not lead or lead.opted_out or not lead.consent_to_sms or lead.human_required:
+            if not lead or lead.opted_out or not lead.consent_to_sms or lead.human_required or lead.ai_paused:
                 item.status = "cancelled"
                 continue
             body = f"Just checking in—would you like the booking link, or is there a question I can help with? Reply STOP to opt out."

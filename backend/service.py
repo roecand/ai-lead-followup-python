@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .database import Direction, FollowUp, Lead, LeadStage, Message, Company
+from .database import Direction, FollowUp, Lead, LeadStage, Message, Company, Author
 from .knowledge import BusinessKnowledge
 from .llm import LLMGateway
 from .schemas import ProcessResult, ReplyDecision
@@ -25,6 +25,23 @@ class ConversationService:
         self.sms = sms
         self.knowledge = knowledge
         self.settings = get_settings()
+
+
+    async def _push(self, lead: Lead, msg: Message) -> None:
+        await manager.broadcast(lead.company_id, {
+            "type": "new_message",
+            "lead_id": str(lead.id),
+            "message": {
+                "id": str(msg.id),
+                "lead_id": str(lead.id),
+                "direction": msg.direction.value,
+                "body": msg.body,
+                "intent": msg.intent,
+                "confidence": msg.confidence,
+                "created_at": msg.created_at.isoformat(),
+                "author": msg.author.value,
+            },
+        })
 
     async def start(self, db: Session, lead: Lead) -> ProcessResult:
         if lead.opted_out or not lead.consent_to_sms:
@@ -60,22 +77,8 @@ class ConversationService:
             reason="No-response check-in after initial outreach",
         ))
         db.commit()
-        db.refresh(outbound_message)
 
-        await manager.broadcast(lead.company_id, {
-            "type": "new_message",
-            "lead_id": str(lead.id),
-            "message": {
-                "id": str(outbound_message.id),
-                "lead_id": str(lead.id),
-                "direction": "outbound",
-                "body": outbound_message.body,
-                "intent": outbound_message.intent,
-                "confidence": outbound_message.confidence,
-                "created_at": outbound_message.created_at.isoformat(),
-                "author": outbound_message.author.value,
-            },
-        })
+        await self._push(lead, outbound_message)
 
         return ProcessResult(lead_id=lead.id, action="replied", reply=greeting)
 
@@ -84,7 +87,7 @@ class ConversationService:
 
         lead = db.scalar(select(Lead).where(Lead.phone == phone, Lead.company_id == company.id))
         if lead is None:
-            lead = Lead(phone=phone, source="inbound_demo", consent_to_sms=True, company_id=company.id, company=company)
+            lead = Lead(phone=phone, source="inbound_demo", consent_to_sms=True, company_id=company.id)
             db.add(lead)
             db.flush()
 
@@ -92,26 +95,13 @@ class ConversationService:
             return ProcessResult(lead_id=lead.id, action="duplicate", reason="Provider event already processed")
 
         incoming = Message(
-            lead_id=lead.id, direction=Direction.INBOUND, body=normalized, provider_id=provider_id
+            lead_id=lead.id, direction=Direction.INBOUND, body=normalized, provider_id=provider_id, author=Author.CUSTOMER
         )
         db.add(incoming)
         db.flush()
-        db.refresh(incoming)
+        db.commit()
 
-        await manager.broadcast(lead.company_id, {
-            "type": "new_message",
-            "lead_id": str(lead.id),
-            "message": {
-                "id": str(incoming.id),
-                "lead_id": str(lead.id),
-                "direction": "inbound",
-                "body": incoming.body,
-                "intent": incoming.intent,
-                "confidence": incoming.confidence,
-                "created_at": incoming.created_at.isoformat(),
-                "author": incoming.author.value,
-            },
-        })
+        await self._push(lead, incoming)
 
         command = normalized.lower().strip(" .!?,")
         if command in STOP_WORDS:
@@ -129,12 +119,16 @@ class ConversationService:
             db.commit()
             return ProcessResult(lead_id=lead.id, action="ignored", reason="Lead may not be messaged")
 
+
         if HIGH_RISK.search(normalized):
             decision = ReplyDecision(
                 reply="Please move to a safe location and call 911 or the appropriate utility emergency line now. I’m flagging this for our team, but don’t wait for a text reply.",
                 intent="emergency", confidence="high", lead_stage=LeadStage.ENGAGED,
                 needs_human=True, human_reason="Potential immediate safety emergency.",
             )
+        elif lead.ai_paused or lead.human_required:
+            db.commit()
+            return ProcessResult(lead_id=lead.id, action="human_handoff", reason="Waiting on staff")
         else:
             history = list(db.scalars(
                 select(Message).where(Message.lead_id == lead.id)
@@ -145,7 +139,7 @@ class ConversationService:
             except Exception as exc:
                 lead.human_required = True
                 db.add(Message(
-                    lead_id=lead.id, direction=Direction.INTERNAL,
+                    lead_id=lead.id, direction=Direction.INTERNAL, author=Author.SYSTEM,
                     body=f"LLM failure; no automated reply sent: {type(exc).__name__}",
                 ))
                 db.commit()
@@ -154,9 +148,20 @@ class ConversationService:
                     reason="No safe structured model response",
                 )
 
+
         self._apply_decision(db, lead, decision)
-        company_twilio_phone = lead.company.twilio_number
-        receipt = await self.sms.send(lead.phone, company_twilio_phone, decision.reply)
+        company_twilio_phone = company.twilio_number
+
+        try:
+            receipt = await self.sms.send(lead.phone, company_twilio_phone, decision.reply)
+        except Exception:
+            lead.human_required = True
+            db.add(Message(
+                lead_id=lead.id, direction=Direction.INTERNAL, author=Author.SYSTEM,
+                body="SMS send failed; no automated reply delivered.",
+            ))
+            db.commit()
+            return ProcessResult(lead_id=lead.id, action="human_handoff", reason="Message failed to send")
 
         outbound_message = Message(
             lead_id=lead.id, direction=Direction.OUTBOUND, body=decision.reply,
@@ -171,22 +176,8 @@ class ConversationService:
                 reason=f"Model-suggested follow-up after {decision.intent}",
             ))
         db.commit()
-        db.refresh(outbound_message)
 
-        await manager.broadcast(lead.company_id, {
-            "type" : "new_message",
-            "lead_id": str(lead.id),
-            "message": {
-                "id": str(outbound_message.id),
-                "lead_id": str(lead.id),
-                "direction": "outbound",
-                "body": outbound_message.body,
-                "intent": outbound_message.intent,
-                "confidence": outbound_message.confidence,
-                "created_at": outbound_message.created_at.isoformat(),
-                "author": outbound_message.author.value,
-            }
-        })
+        await self._push(lead, outbound_message)
 
         return ProcessResult(
             lead_id=lead.id,
@@ -204,7 +195,7 @@ class ConversationService:
             self._cancel_followups(db, lead.id)
         if decision.needs_human:
             db.add(Message(
-                lead_id=lead.id, direction=Direction.INTERNAL,
+                lead_id=lead.id, direction=Direction.INTERNAL, author=Author.SYSTEM,
                 body=f"Human handoff: {decision.human_reason or 'model requested review'}",
             ))
 
