@@ -95,6 +95,23 @@ class ConversationService:
             lead_id=lead.id, direction=Direction.INBOUND, body=normalized, provider_id=provider_id
         )
         db.add(incoming)
+        db.flush()
+        db.refresh(incoming)
+
+        await manager.broadcast(lead.company_id, {
+            "type": "new_message",
+            "lead_id": str(lead.id),
+            "message": {
+                "id": str(incoming.id),
+                "lead_id": str(lead.id),
+                "direction": "inbound",
+                "body": incoming.body,
+                "intent": incoming.intent,
+                "confidence": incoming.confidence,
+                "created_at": incoming.created_at.isoformat(),
+                "author": incoming.author.value,
+            },
+        })
 
         command = normalized.lower().strip(" .!?,")
         if command in STOP_WORDS:

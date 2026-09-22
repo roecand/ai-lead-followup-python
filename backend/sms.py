@@ -90,6 +90,8 @@ class GoHighLevelSMS(SMSGateway):
             headers={"Version": self.MESSAGES_API_VERSION},
             json=payload,
         )
+        if response.status_code >= 400:
+            print("GHL send error:", response.status_code, response.text)
         response.raise_for_status()
         return SendReceipt(provider_id=response.json()["messageId"])
 

@@ -6,7 +6,7 @@ class ConnectionManager:
         self.active: dict[uuid.UUID, set[WebSocket]] = {}
 
     async def connect(self, company_id: uuid.UUID, ws: WebSocket) -> None:
-        await ws.connect()
+        await ws.accept()
         self.active.setdefault(company_id, set()).add(ws)
 
     def disconnect(self, company_id: uuid.UUID, ws: WebSocket) -> None:

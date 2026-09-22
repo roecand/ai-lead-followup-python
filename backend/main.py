@@ -106,26 +106,6 @@ def get_current_user(db: Session = Depends(get_db), token: str | None = Cookie(d
         raise HTTPException(401, "User not found")
     return user
 
-# TEMPORARY: inbound bridge for GoHighLevel testing. Fed by a GHL Workflow's
-# "Webhook" action (Trigger: Customer Replied), not a native GHL app webhook —
-# GHL doesn't sign these, so a shared secret in the query string is the only
-# check we have. Delete this route when GHL testing is done.
-@app.post("/webhooks/ghl/inbound")
-async def ghl_inbound(
-    payload: GHLInboundPayload,
-    token: str,
-    db: Session = Depends(get_db),
-) -> Response:
-    settings = get_settings()
-    if not settings.ghl_webhook_secret or token != settings.ghl_webhook_secret:
-        raise HTTPException(403, "Not authorized")
-
-    company = db.scalar(select(Company).where(Company.twilio_number == payload.to))
-    if company is None:
-        raise HTTPException(404, "No company is registered for this number")
-
-    await service.receive(db, company, payload.phone, payload.message, payload.message_id)
-    return Response(status_code=204)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db), token: str = Cookie(default=None)) -> None:
@@ -141,6 +121,46 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
             await websocket.receive_text()
     except WebSocketException:
         manager.disconnect(user.company_id, websocket)
+
+# TEMPORARY: inbound bridge for GoHighLevel testing. Fed by a GHL Workflow's
+# "Webhook" action (Trigger: Customer Replied), not a native GHL app webhook —
+# GHL doesn't sign these, so a shared secret in the query string is the only
+# check we have. Delete this route when GHL testing is done.
+import re
+from fastapi import Request
+
+def _normalize_phone(value: str) -> str:
+    digits = re.sub(r"\D", "", value)
+    if len(digits) == 10:
+        digits = "1" + digits
+    return f"+{digits}"
+
+
+@app.post("/webhooks/ghl/inbound")
+async def ghl_inbound(request: Request, token: str, db: Session = Depends(get_db)) -> Response:
+    settings = get_settings()
+    if not settings.ghl_webhook_secret or token != settings.ghl_webhook_secret:
+        raise HTTPException(403, "Not authorized")
+
+    raw = await request.json()
+    custom = raw.get("customData", {})
+
+    to = custom.get("to")
+    message_body = custom.get("message") or (raw.get("message") or {}).get("body")
+    phone_source = raw.get("phone") or custom.get("phone")
+    message_id = custom.get("message_id") or None  # "" -> None
+
+    if not to or not message_body or not phone_source:
+        raise HTTPException(422, "Missing to/phone/message in webhook payload")
+
+    phone = _normalize_phone(phone_source)
+
+    company = db.scalar(select(Company).where(Company.twilio_number == to))
+    if company is None:
+        raise HTTPException(404, "No company is registered for this number")
+
+    await service.receive(db, company, phone, message_body, message_id)
+    return Response(status_code=204)
 
 
 @app.post("/auth/login", status_code=204)
@@ -168,7 +188,7 @@ async def auth_login(payload: LoginRequest, response: Response, db: Session = De
         key="token",
         value=access_token,
         httponly=True,
-        secure=True,
+        secure=False, # Temp
         samesite="lax",
         max_age=1800,
     )
@@ -177,7 +197,7 @@ async def auth_login(payload: LoginRequest, response: Response, db: Session = De
         key="refresh_token",
         value=refresh_value,
         httponly=True,
-        secure=True,
+        secure=False,
         samesite="lax",
         max_age=int(refresh_lifetime.total_seconds()),
     )
@@ -206,7 +226,7 @@ async def auth_refresh(response: Response, db: Session = Depends(get_db), refres
         key="token",
         value=new_access_token,
         httponly=True,
-        secure=True,
+        secure=False,
         samesite="lax",
         max_age=1800,
     )
