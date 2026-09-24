@@ -1,8 +1,7 @@
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import Depends, FastAPI, Form, HTTPException, Cookie, Header, WebSocket, WebSocketDisconnect, \
-    WebSocketException
+from fastapi import Depends, FastAPI, Form, HTTPException, Cookie, Header, WebSocket, WebSocketDisconnect, WebSocketException, Request
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -36,12 +35,14 @@ from .schemas import (
 from .service import ConversationService
 from .sms import build_sms_gateway
 from .connnection_manager import manager
+from .ratelimit import RedisClient
 
 
 sms_gateway = build_sms_gateway()
 service = ConversationService(build_gateway(), sms_gateway, load_knowledge())
 scheduler = AsyncIOScheduler()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+redis_client = RedisClient()
 
 
 def get_db():
@@ -106,6 +107,9 @@ def get_current_user(db: Session = Depends(get_db), token: str | None = Cookie(d
         raise HTTPException(401, "User not found")
     return user
 
+def client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db), token: str = Cookie(default=None)) -> None:
@@ -119,7 +123,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
     try:
         while True:
             await websocket.receive_text()
-    except WebSocketException:
+    except WebSocketDisconnect:
         manager.disconnect(user.company_id, websocket)
 
 # TEMPORARY: inbound bridge for GoHighLevel testing. Fed by a GHL Workflow's
@@ -127,7 +131,6 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
 # GHL doesn't sign these, so a shared secret in the query string is the only
 # check we have. Delete this route when GHL testing is done.
 import re
-from fastapi import Request
 
 def _normalize_phone(value: str) -> str:
     digits = re.sub(r"\D", "", value)
@@ -164,11 +167,23 @@ async def ghl_inbound(request: Request, token: str, db: Session = Depends(get_db
 
 
 @app.post("/auth/login", status_code=204)
-async def auth_login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> None:
+async def auth_login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> None:
+    email_key = f"login_fail:email:{payload.email.strip().lower()}"
+    ip_key = f"login_fail:ip:{client_ip(request)}"
+
+    email_limit_hit = await redis_client.check_login(email_key, redis_client.MAX_FAILS_PER_EMAIL)
+    ip_limit_hit = await redis_client.check_login(ip_key, redis_client.MAX_FAILS_PER_IP)
+
+    if email_limit_hit or ip_limit_hit:
+        raise HTTPException(429, "Too many login attempts. Try again later.")
+
     user = db.scalar(select(User).where(User.email == payload.email))
 
     if not user or not pwd_context.verify(payload.password, user.hashed_password):
         raise HTTPException(401, "Invalid email or password")
+
+    await redis_client.delete(email_key)
+    await redis_client.delete(ip_key)
 
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
     access_token = jwt.encode(
@@ -188,7 +203,7 @@ async def auth_login(payload: LoginRequest, response: Response, db: Session = De
         key="token",
         value=access_token,
         httponly=True,
-        secure=False, # Temp
+        secure=True,
         samesite="lax",
         max_age=1800,
     )
@@ -197,7 +212,7 @@ async def auth_login(payload: LoginRequest, response: Response, db: Session = De
         key="refresh_token",
         value=refresh_value,
         httponly=True,
-        secure=False,
+        secure=True,
         samesite="lax",
         max_age=int(refresh_lifetime.total_seconds()),
     )
@@ -226,7 +241,7 @@ async def auth_refresh(response: Response, db: Session = Depends(get_db), refres
         key="token",
         value=new_access_token,
         httponly=True,
-        secure=False,
+        secure=True,
         samesite="lax",
         max_age=1800,
     )

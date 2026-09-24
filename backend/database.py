@@ -125,6 +125,7 @@ class User(Base):
 
     company: Mapped[Company] = relationship(back_populates="users")
 
+
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 

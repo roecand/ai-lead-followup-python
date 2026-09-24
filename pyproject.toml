@@ -13,6 +13,7 @@ dependencies = [
   "psycopg[binary]>=3.3.5",
   "pydantic-settings>=2.6,<3",
   "python-multipart>=0.0.18,<1",
+  "redis>=8.1.0",
   "sqlalchemy>=2.0,<3",
   "twilio>=9.3,<10",
   "uvicorn[standard]>=0.32,<1",

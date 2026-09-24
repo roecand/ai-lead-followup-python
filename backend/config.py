@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     history_limit: int = 30
     jwt_secret: str
     admin_secret: str
+    redis_url: str = "redis://localhost:6379"
 
 
 @lru_cache
