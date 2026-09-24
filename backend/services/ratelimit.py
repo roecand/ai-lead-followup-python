@@ -1,7 +1,7 @@
 import redis.asyncio as redis
 from redis.exceptions import RedisError
 
-from .config import get_settings
+from backend.config import get_settings
 
 
 class RedisClient:

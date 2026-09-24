@@ -4,13 +4,13 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .config import get_settings
-from .database import Direction, FollowUp, Lead, LeadStage, Message, Company, Author
-from .knowledge import BusinessKnowledge
-from .llm import LLMGateway
-from .schemas import ProcessResult, ReplyDecision
-from .sms import SMSGateway
-from .connnection_manager import manager
+from backend.config import get_settings
+from backend.database import Direction, FollowUp, Lead, LeadStage, Message, Company, Author
+from backend.services.knowledge import BusinessKnowledge
+from backend.services.llm import LLMGateway
+from backend.schemas import ProcessResult, ReplyDecision
+from backend.services.sms import SMSGateway
+from backend.services.connection_manager import manager
 
 import uuid
 

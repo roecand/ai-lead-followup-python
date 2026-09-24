@@ -3,10 +3,10 @@ from abc import ABC, abstractmethod
 
 from openai import AsyncOpenAI
 
-from .config import get_settings
-from .database import Lead, Message
-from .knowledge import BusinessKnowledge
-from .schemas import ReplyDecision
+from backend.config import get_settings
+from backend.database import Lead, Message
+from backend.services.knowledge import BusinessKnowledge
+from backend.schemas import ReplyDecision
 
 
 SYSTEM_PROMPT = """You draft SMS replies for a business lead-follow-up assistant.
