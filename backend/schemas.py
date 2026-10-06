@@ -95,6 +95,11 @@ class SetAiPaused(BaseModel):
     paused: bool
 
 
+class LeadCountSummary(BaseModel):
+    new_today: int
+    new_week: int
+
+
 class GHLInboundPayload(BaseModel):
     """TEMPORARY: shape of the custom JSON body configured in the GHL workflow's
     webhook action. Delete alongside the GHL gateway."""

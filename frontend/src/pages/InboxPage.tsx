@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Lead, Message } from "../components/ConversationsPage";
 import ConversationsPage from "../components/ConversationsPage";
-import { apiFetch, WS_BASE } from "../api/client";
+import { apiFetch, WS_BASE } from "../lib/client";
 
 export default function InboxPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
