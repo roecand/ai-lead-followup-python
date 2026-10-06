@@ -95,6 +95,18 @@ class SetAiPaused(BaseModel):
     paused: bool
 
 
+class CompanyStats(BaseModel):
+    range_days: int  # 0 = all time
+    new_leads: int
+    new_leads_prev: int | None  # same-length period before this one; None for all time
+    new_leads_by_day: list[int]  # oldest first, company-local days
+    booked: int
+    ai_replies: int
+    staff_replies: int
+    first_reply_seconds: float | None
+    first_reply_samples: int
+
+
 class GHLInboundPayload(BaseModel):
     """TEMPORARY: shape of the custom JSON body configured in the GHL workflow's
     webhook action. Delete alongside the GHL gateway."""

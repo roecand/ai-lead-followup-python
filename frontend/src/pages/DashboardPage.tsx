@@ -15,6 +15,19 @@ const DAY = 86_400_000;
 const LOG_COLLAPSED = 6;
 
 type Range = "7" | "30" | "all";
+
+/** GET /company/stats */
+interface CompanyStats {
+  range_days: number;
+  new_leads: number;
+  new_leads_prev: number | null;
+  new_leads_by_day: number[];
+  booked: number;
+  ai_replies: number;
+  staff_replies: number;
+  first_reply_seconds: number | null;
+  first_reply_samples: number;
+}
 const RANGE_LABEL: Record<Range, string> = { "7": "previous 7 days", "30": "previous 30 days", all: "" };
 
 const STAGES: { key: Stage; label: string }[] = [
@@ -69,6 +82,15 @@ function median(xs: number[]) {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
+async function fetchStats(days: number): Promise<CompanyStats | null> {
+  try {
+    const res = await apiFetch(`/company/stats?days=${days}`);
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function DashboardPage() {
   const [params] = useSearchParams();
   // Preview data is a dev-only affordance; it must not be reachable in a production build.
@@ -82,6 +104,9 @@ export default function DashboardPage() {
   const [now, setNow] = useState(() => Date.now());
   const [range, setRange] = useState<Range>("7");
   const [showAllLog, setShowAllLog] = useState(false);
+  const [serverStats, setServerStats] = useState<CompanyStats | null>(null);
+  const days = range === "all" ? 0 : Number(range);
+  const daysRef = useRef(days);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30_000);
@@ -116,12 +141,27 @@ export default function DashboardPage() {
     };
   }, [demo]);
 
+  // Exact KPIs from the backend. If the call fails, the KPI strip falls back to computing
+  // from the threads already loaded (and says it's a sample).
+  useEffect(() => {
+    daysRef.current = days;
+    if (demo) return;
+    let cancelled = false;
+    fetchStats(days).then((s) => {
+      if (!cancelled) setServerStats(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [demo, days]);
+
   const refreshTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const refreshLeads = useCallback(() => {
     clearTimeout(refreshTimer.current);
     refreshTimer.current = setTimeout(async () => {
       const res = await apiFetch("/company/leads");
       if (res.ok) setLeads(await res.json());
+      fetchStats(daysRef.current).then(setServerStats);
     }, 800);
   }, []);
 
@@ -228,6 +268,40 @@ export default function DashboardPage() {
     };
   }, [leads, messages, now, range]);
 
+  const sampled = !demo && (leads?.length ?? 0) > Object.keys(messages).length;
+  const kpi = useMemo(() => {
+    const s = serverStats;
+    if (s && s.range_days === days) {
+      return {
+        newLeads: s.new_leads,
+        newLeadsDelta: s.new_leads_prev === null ? null : s.new_leads - s.new_leads_prev,
+        spark: s.new_leads_by_day,
+        booked: s.booked,
+        bookedRate: s.new_leads ? Math.round((s.booked / s.new_leads) * 100) : null,
+        ai: s.ai_replies,
+        staff: s.staff_replies,
+        aiShare:
+          s.ai_replies + s.staff_replies
+            ? Math.round((s.ai_replies / (s.ai_replies + s.staff_replies)) * 100)
+            : null,
+        firstResponse: s.first_reply_seconds === null ? null : s.first_reply_seconds * 1000,
+        sampled: false,
+      };
+    }
+    return {
+      newLeads: stats.newLeads,
+      newLeadsDelta: stats.newLeadsDelta,
+      spark: stats.spark,
+      booked: stats.booked,
+      bookedRate: stats.bookedRate,
+      ai: stats.ai,
+      staff: stats.staff,
+      aiShare: stats.aiShare,
+      firstResponse: stats.firstResponse,
+      sampled,
+    };
+  }, [serverStats, days, stats, sampled]);
+
   const leadById = useMemo(() => new Map((leads ?? []).map((l) => [l.id, l])), [leads]);
 
   const feed = useMemo(
@@ -247,8 +321,7 @@ export default function DashboardPage() {
   const loading = leads === null && !error;
   const pipelineTotal = Math.max(1, STAGES.reduce((n, s) => n + stats.byStage[s.key], 0));
   const handledByAi = Math.max(0, stats.active.length - stats.needsYou.length - stats.paused.length);
-  const sampled = !demo && (leads?.length ?? 0) > Object.keys(messages).length;
-  const sparkMax = Math.max(1, ...stats.spark);
+  const sparkMax = Math.max(1, ...kpi.spark);
   const visibleFeed = showAllLog ? feed : feed.slice(0, LOG_COLLAPSED);
 
   return (
@@ -326,24 +399,24 @@ export default function DashboardPage() {
               <dl className="kpis">
                 <div className="kpi">
                   <dt>New leads</dt>
-                  <dd>{stats.newLeads}</dd>
+                  <dd>{kpi.newLeads}</dd>
                   <p className="kpi-sub">
-                    {stats.newLeadsDelta === null ? (
+                    {kpi.newLeadsDelta === null ? (
                       "Since you started"
-                    ) : stats.newLeadsDelta === 0 ? (
+                    ) : kpi.newLeadsDelta === 0 ? (
                       `Same as the ${RANGE_LABEL[range]}`
                     ) : (
                       <>
-                        <span className={`delta ${stats.newLeadsDelta > 0 ? "up" : "down"}`}>
-                          {stats.newLeadsDelta > 0 ? <ArrowUp size={12} weight="bold" aria-hidden="true" /> : <ArrowDown size={12} weight="bold" aria-hidden="true" />}
-                          {Math.abs(stats.newLeadsDelta)}
+                        <span className={`delta ${kpi.newLeadsDelta > 0 ? "up" : "down"}`}>
+                          {kpi.newLeadsDelta > 0 ? <ArrowUp size={12} weight="bold" aria-hidden="true" /> : <ArrowDown size={12} weight="bold" aria-hidden="true" />}
+                          {Math.abs(kpi.newLeadsDelta)}
                         </span>{" "}
-                        {stats.newLeadsDelta > 0 ? "more" : "fewer"} than the {RANGE_LABEL[range]}
+                        {kpi.newLeadsDelta > 0 ? "more" : "fewer"} than the {RANGE_LABEL[range]}
                       </>
                     )}
                   </p>
-                  <div className="spark" role="img" aria-label={`New leads per day: ${stats.spark.join(", ")}`}>
-                    {stats.spark.map((n, i) => (
+                  <div className="spark" role="img" aria-label={`New leads per day: ${kpi.spark.join(", ")}`}>
+                    {kpi.spark.map((n, i) => (
                       <span key={i} style={{ height: `${Math.max(n ? 12 : 4, (n / sparkMax) * 100)}%` }} className={n ? "on" : ""} />
                     ))}
                   </div>
@@ -351,26 +424,26 @@ export default function DashboardPage() {
 
                 <div className="kpi">
                   <dt>Booked</dt>
-                  <dd>{stats.booked}</dd>
+                  <dd>{kpi.booked}</dd>
                   <p className="kpi-sub">
-                    {stats.bookedRate === null ? "No new leads in this range" : `${stats.bookedRate}% of new leads`}
+                    {kpi.bookedRate === null ? "No new leads in this range" : `${kpi.bookedRate}% of new leads`}
                   </p>
                 </div>
 
                 <div className="kpi">
                   <dt>Handled by AI</dt>
-                  <dd>{stats.aiShare === null ? "n/a" : `${stats.aiShare}%`}</dd>
+                  <dd>{kpi.aiShare === null ? "n/a" : `${kpi.aiShare}%`}</dd>
                   <p className="kpi-sub">
-                    {stats.aiShare === null ? "No replies yet" : `${stats.ai} AI replies, ${stats.staff} from you`}
+                    {kpi.aiShare === null ? "No replies yet" : `${kpi.ai} AI replies, ${kpi.staff} from you`}
                   </p>
-                  {sampled && <p className="kpi-note">From your latest {FEED_LEADS} conversations</p>}
+                  {kpi.sampled && <p className="kpi-note">From your latest {FEED_LEADS} conversations</p>}
                 </div>
 
                 <div className="kpi">
                   <dt>First reply</dt>
-                  <dd>{stats.firstResponse === null ? "n/a" : duration(stats.firstResponse)}</dd>
+                  <dd>{kpi.firstResponse === null ? "n/a" : duration(kpi.firstResponse)}</dd>
                   <p className="kpi-sub">Typical wait after a customer's first text</p>
-                  {sampled && <p className="kpi-note">From your latest {FEED_LEADS} conversations</p>}
+                  {kpi.sampled && <p className="kpi-note">From your latest {FEED_LEADS} conversations</p>}
                 </div>
               </dl>
             </section>

@@ -1,12 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import Author, Direction, Lead, Message, User
 from ..dependencies import get_current_user, get_db, sms_gateway
-from ..schemas import LeadCreate, LeadView, MessageView, SendMessageRequest, SetAiPaused
+from ..schemas import CompanyStats, LeadCreate, LeadView, MessageView, SendMessageRequest, SetAiPaused
+from ..services.stats import company_stats
 
 router = APIRouter(tags=["leads"])
 
@@ -28,6 +29,12 @@ def list_leads(db: Session = Depends(get_db), user: User = Depends(get_current_u
     return list(db.scalars(
         select(Lead).where(Lead.company_id == user.company_id).order_by(Lead.updated_at.desc())
     ))
+
+
+# KPIs for the dashboard overview. days=0 means all time.
+@router.get("/company/stats", response_model=CompanyStats)
+def get_company_stats(days: int = Query(7, ge=0, le=365), db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
+    return company_stats(db, user.company_id, days)
 
 
 @router.get("/handoffs", response_model=list[LeadView])
