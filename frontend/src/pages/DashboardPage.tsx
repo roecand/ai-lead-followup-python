@@ -5,7 +5,7 @@ import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "./dashboard.css";
 import type { Lead, Message, Stage } from "../components/ConversationsPage";
-import { apiFetch, WS_BASE } from "../api/client";
+import { apiFetch, WS_BASE } from "../lib/client";
 import { DEMO_COMPANY, demoLeads, demoMessages } from "./dashboardDemo";
 import ThemePanel, { Segmented } from "./ThemePanel";
 import { themeVars, useTheme } from "./useTheme";
@@ -338,6 +338,7 @@ export default function DashboardPage() {
           <nav className="dash-nav" aria-label="Primary">
             <Link to="/dashboard" aria-current="page">Overview</Link>
             <Link to="/messageboard">Inbox</Link>
+            <Link to="/settings">Settings</Link>
           </nav>
           <span className={`dash-live ${live ? "is-live" : ""}`} role="status">
             <span className="dash-live-dot" aria-hidden="true" />

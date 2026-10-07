@@ -95,6 +95,11 @@ class SetAiPaused(BaseModel):
     paused: bool
 
 
+class LeadCountSummary(BaseModel):
+    new_today: int
+    new_week: int
+
+
 class CompanyStats(BaseModel):
     range_days: int  # 0 = all time
     new_leads: int

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { API_BASE } from "../api/client";
+import { API_BASE } from "../lib/client";
 
 export default function LoginPage({
   onSignIn,
@@ -45,7 +45,7 @@ export default function LoginPage({
           }
 
       }
-      navigate("/messageboard");
+      navigate("/dashboard");
     }
     catch (err) {
       setError(

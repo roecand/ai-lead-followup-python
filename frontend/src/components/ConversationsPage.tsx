@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import AppHeader from "./AppHeader";
+import { THEME_CSS } from "../lib/theme";
 
 // TYPES
 
@@ -213,6 +215,7 @@ export default function ConversationsPage({
   return (
     <div className="gs-root">
       <style>{CSS}</style>
+      <style>{THEME_CSS}</style>
 
       <div className="gs-grain" aria-hidden="true" />
 
@@ -220,28 +223,7 @@ export default function ConversationsPage({
           HEADER. If already have app chrome, delete this later
           and the .gs-body top padding goes with it.
       ------------------------------------------------------------------ */}
-      <header className="gs-top">
-        <span className="gs-mark">
-          <svg viewBox="0 0 24 24" width="18" height="18" focusable="false" aria-hidden="true">
-            <g stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" vectorEffect="non-scaling-stroke">
-              <line x1="12" y1="2.5" x2="12" y2="21.5" />
-              <line x1="3.77" y1="7.25" x2="20.23" y2="16.75" />
-              <line x1="3.77" y1="16.75" x2="20.23" y2="7.25" />
-            </g>
-          </svg>
-          <span>Green Star</span>
-        </span>
-        <span className="gs-top-right">
-          {needsYouCount > 0 ? (
-            <span className="gs-waiting">
-              <span className="gs-dot-sun" />
-              {needsYouCount} waiting on you
-            </span>
-          ) : (
-            <span className="gs-waiting gs-waiting-clear">Nothing waiting on you</span>
-          )}
-        </span>
-      </header>
+      <AppHeader waitingCount={needsYouCount} />
 
       <div className="gs-body">
         {/* LEFT RAIL. */}
