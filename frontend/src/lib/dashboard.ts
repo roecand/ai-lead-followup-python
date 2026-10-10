@@ -3,21 +3,45 @@ import { apiFetch } from "./client";
 
 /* ---------------------------------------------------------------------------
    SHAPES
-   These are the shapes the dashboard renders. When you build the backend,
-   make /dashboard/summary return exactly this and nothing else in the UI
-   has to change.
+   These are the shapes the dashboard renders. Make GET /dashboard/summary
+   return exactly this and nothing else in the UI has to change.
+
+   "Week" below means the last 7 days rolling, in the company's timezone, not
+   Monday to Sunday. Rolling keeps the week-over-week comparison fair on a
+   Monday morning.
 --------------------------------------------------------------------------- */
 
 export interface DashboardSummary {
   new_leads_today: number;
+  /** Leads created in the last 7 days. */
   new_leads_week: number;
-  /** Leads with at least one message in the last 7 days. Your call on the window. */
+  /** Leads created in the 7 days before that. Drives the "3 more than last week" line. */
+  new_leads_prev_week: number;
+  /** 7 counts, oldest day first, today last. Drives the little bar chart. */
+  new_leads_by_day: number[];
+
+  /** Leads with at least one message in the last 7 days. */
   active_conversations: number;
   /** Leads where ai_paused is true (staff took over). */
   ai_paused_count: number;
-  booked_this_week: number;
-  /** Leads where opted_out is true. */
-  opted_out_count: number;
+
+  /**
+   * Leads created in the last 7 days that are now in the booked stage.
+   * Counted against that same group so "% of new leads" is an honest ratio.
+   * There is no stage history table, so "booked this week" can't be measured yet.
+   */
+  booked_week: number;
+
+  /** Outbound messages in the last 7 days, split by author. */
+  ai_replies_week: number;
+  staff_replies_week: number;
+
+  /**
+   * Median seconds from a lead's first inbound text to the next outbound
+   * message, over leads whose first text landed in the last 7 days.
+   * null when there were none. This is the speed-to-lead number.
+   */
+  first_reply_seconds: number | null;
 }
 
 export interface HandoffItem {
@@ -25,7 +49,7 @@ export interface HandoffItem {
   /**
    * Why the assistant asked for a person. There is no column for this yet.
    * Lead only has last_intent, so either add a human_reason column or send
-   * last_intent here and let the UI fall back to it.
+   * null here and the UI falls back to last_intent.
    */
   reason: string | null;
   /** When the lead was flagged. updated_at is close enough for now. */
@@ -128,10 +152,14 @@ function mockDashboard(): DashboardData {
     summary: {
       new_leads_today: 4,
       new_leads_week: 17,
+      new_leads_prev_week: 14,
+      new_leads_by_day: [2, 3, 1, 0, 4, 3, 4],
       active_conversations: 23,
       ai_paused_count: 3,
-      booked_this_week: 5,
-      opted_out_count: 2,
+      booked_week: 5,
+      ai_replies_week: 142,
+      staff_replies_week: 19,
+      first_reply_seconds: 38,
     },
     stage_counts: {
       new: 12, contacted: 18, engaged: 23, qualified: 9,

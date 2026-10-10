@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { Lead, Message } from "../components/ConversationsPage";
 import ConversationsPage from "../components/ConversationsPage";
-import { apiFetch, WS_BASE } from "../lib/client";
+import { apiFetch } from "../lib/client";
+import { useLiveFeed } from "../lib/useLiveFeed";
 
 export default function InboxPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [messagesByLead, setMessagesByLead] = useState<Record<string, Message[]>>({});
   const [pendingAiToggle, setPendingAiToggle] = useState<Set<string>>(new Set());
+  // /messageboard?lead=<id> opens that thread first (the dashboard links here)
+  const [params] = useSearchParams();
+  const initialLeadId = params.get("lead");
 
 
   // 1. Pull the user's company's leads
@@ -16,21 +21,15 @@ export default function InboxPage() {
       .then(setLeads);
   }, []);
 
-  useEffect(() => {
-    const ws = new WebSocket(`${WS_BASE}/ws`)
-
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data)
-      if (data.type == "new_message") {
-        setMessagesByLead((prev) => {
+  // Live updates. Reconnects on its own if the connection drops.
+  const live = useLiveFeed((data) => {
+    if (data.type === "new_message") {
+      setMessagesByLead((prev) => {
         if (!prev[data.lead_id]) return prev;
         return { ...prev, [data.lead_id]: [...prev[data.lead_id], data.message] };
-        });
-      }
-    };
-
-      return () => ws.close();
-  }, []);
+      });
+    }
+  });
 
   // 2 Load messages
   async function loadThread(leadId: string) {
@@ -40,10 +39,12 @@ export default function InboxPage() {
     setMessagesByLead((prev) => ({...prev, [leadId]: messages }))
   }
 
-  // Need to run loadThread initially to pull the messages of the first lead selected by defualt.
+  // Need to run loadThread initially to pull the messages of the lead selected by default:
+  // the one in ?lead= if it's in the list, otherwise the first lead.
   useEffect(() => {
   if (leads.length === 0) return;
-  const firstId = leads[0].id;
+  const firstId =
+    initialLeadId && leads.some((l) => l.id === initialLeadId) ? initialLeadId : leads[0].id;
   if (messagesByLead[firstId]) return;
 
   apiFetch(`/leads/${firstId}/messages`)
@@ -52,7 +53,7 @@ export default function InboxPage() {
       setMessagesByLead((prev) => ({ ...prev, [firstId]: messages }));
     });
 
-  }, [leads]);
+  }, [leads, initialLeadId]);
 
   // 3 toggle ai off and on
   async function toggleAi({ leadId, paused }: { leadId: string; paused: boolean }) {
@@ -151,5 +152,7 @@ export default function InboxPage() {
       pendingAiToggles={pendingAiToggle}
       onSendMessage={sendMessage}
       onResolveLead={resolveLead}
+      initialLeadId={initialLeadId}
+      live={live}
   />;
 }

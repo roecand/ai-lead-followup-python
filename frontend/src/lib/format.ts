@@ -86,3 +86,14 @@ export function previewOf(m: {
   }
   return m.body;
 }
+/** "38 sec", "4 min", "1.5 hr". Used for reply times. */
+export function durationLabel(seconds: number): string {
+  if (seconds < 90) return Math.max(1, Math.round(seconds)) + " sec";
+  const mins = seconds / 60;
+  if (mins < 90) return Math.round(mins) + " min";
+  return (mins / 60).toFixed(1) + " hr";
+}
+
+export function sourceLabel(source: string): string {
+  return source.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+}

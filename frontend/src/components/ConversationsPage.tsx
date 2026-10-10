@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AppHeader from "./AppHeader";
 import { THEME_CSS } from "../lib/theme";
+import { displayName, initials, intentLabel, previewOf, shortAgo, sourceLabel, stageLabel } from "../lib/format";
 
 // TYPES
 
@@ -47,6 +48,10 @@ interface ConversationsPageProps {
   /** Shown on staff-authored messages. Swap for the signed-in user's name. */
   staffName?: string;
   pendingAiToggles?: Set<string>;
+  /** Thread to open first, e.g. from /messageboard?lead=<id>. */
+  initialLeadId?: string | null;
+  /** Websocket state, shown in the header. */
+  live?: boolean;
 }
 
 // LAYOUT CONSTANTS
@@ -69,13 +74,15 @@ export default function ConversationsPage({
   onResolveLead,
   staffName = "You",
   pendingAiToggles,
+  initialLeadId = null,
+  live,
 }: ConversationsPageProps) {
   const leads = leadsProp ?? [];
   const messagesByLead = messagesProp ?? {};
 
   /* --- selection and filtering -------------------------------------------- */
   // The user's explicit pick, if they've made one. Starts unset.
-  const [selectedIdOverride, setSelectedId] = useState<string | null>(null);
+  const [selectedIdOverride, setSelectedId] = useState<string | null>(initialLeadId);
   const [filter, setFilter] = useState<"all" | "needs_you" | "paused">("all");
   const [query, setQuery] = useState("");
 
@@ -223,7 +230,7 @@ export default function ConversationsPage({
           HEADER. If already have app chrome, delete this later
           and the .gs-body top padding goes with it.
       ------------------------------------------------------------------ */}
-      <AppHeader waitingCount={needsYouCount} />
+      <AppHeader waitingCount={needsYouCount} live={live} />
 
       <div className="gs-body">
         {/* LEFT RAIL. */}
@@ -584,49 +591,16 @@ function DayRule({ when }: { when: string }) {
    Intl.RelativeTimeFormat later if you want real localization.
 --------------------------------------------------------------------------- */
 
-function displayName(lead: Lead) {
-  return lead.first_name?.trim() || lead.phone;
-}
 
-function initials(lead: Lead) {
-  const n = lead.first_name?.trim();
-  if (!n) return lead.phone.slice(-2);
-  const parts = n.split(/\s+/);
-  return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
-}
 
-function previewOf(m: Message) {
-  if (m.direction === "internal" || m.author === "system") return m.body;
-  const prefix = m.direction === "outbound" ? (m.author === "staff" ? "You: " : "Assistant: ") : "";
-  return prefix + m.body;
-}
 
 function lastActivity(list?: Message[]) {
   const last = list?.[list.length - 1];
   return last ? new Date(last.created_at).getTime() : 0;
 }
 
-function stageLabel(stage: Stage) {
-  const map: Record<Stage, string> = {
-    new: "New",
-    contacted: "Contacted",
-    engaged: "Talking",
-    qualified: "Qualified",
-    booked: "Booked",
-    nurture: "Not now",
-    closed: "Closed",
-    do_not_contact: "Do not contact",
-  };
-  return map[stage] ?? stage;
-}
 
-function intentLabel(intent: string) {
-  return intent.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
-}
 
-function sourceLabel(source: string) {
-  return source.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
-}
 
 function clockTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -649,50 +623,20 @@ function dayLabel(iso: string) {
   return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 }
 
-function shortAgo(iso: string) {
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1) return "now";
-  if (mins < 60) return mins + "m";
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return hrs + "h";
-  const days = Math.floor(hrs / 24);
-  return days < 7 ? days + "d" : new Date(iso).toLocaleDateString([], { month: "numeric", day: "numeric" });
-}
 
 /* ===========================================================================
    STYLES
-   Same palette as the login screen. Change the values at the top of .gs-root
-   to restyle the whole page without touching any markup.
+   Every color is a token from src/index.css, so light and dark both work.
+   Change the tokens there to restyle the whole app without touching markup.
    =========================================================================== */
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&display=swap');
-
+/* Colors come from the tokens in src/index.css. Header styles live in lib/theme.ts. */
 .gs-root {
-  --paper:      #F5F4EF;  /* page, warm near-white */
-  --card:       #FDFCF9;  /* panels, inbound bubbles. Warm, not pure white. */
-  --ink:        #16241C;  /* primary text, dark work green */
-  --ink-soft:   #4B5D53;  /* secondary text */
-  --ink-dim:    #7B8A81;  /* tertiary text */
-  --line:       #DEDCD3;  /* hairlines */
-  --line-lit:   #C2BFB2;  /* hairlines on hover */
-
-  --green:      #1E5138;  /* the accent, work polo green */
-  --green-lit:  #2A6B4A;  /* accent on hover */
-  --green-wash: #E7EFE9;  /* accent as a background tint */
-
-  --flag:       #A06A12;  /* a person is needed here, and nothing else */
-  --alert:      #A8412A;  /* something went wrong, and nothing else */
-
-  --sink:       #E7E4DB;  /* the rail, clearly one step back from the page */
-
-  --radius:     4px;
-  --top-h:      56px;
-
   position: relative;
   height: 100vh;
   background: var(--paper);
   color: var(--ink);
-  font-family: 'Familjen Grotesk', system-ui, sans-serif;
+  font-family: var(--font);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
@@ -709,35 +653,8 @@ const CSS = `
    It sits above everything and ignores pointer events, so it can't interfere. */
 .gs-grain {
   position: absolute; inset: 0; pointer-events: none; z-index: 5;
-  opacity: 0.030;
+  opacity: var(--grain);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-/* ---------- header ---------- */
-
-.gs-top {
-  position: relative; z-index: 2;
-  height: var(--top-h);
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 20px;
-  background: var(--card);
-  border-bottom: 1px solid var(--line);
-}
-
-.gs-mark {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 15px; font-weight: 700; letter-spacing: -0.01em;
-}
-.gs-mark svg { color: var(--green); flex-shrink: 0; position: relative; top: -1px; }
-
-.gs-waiting {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-size: 13px; font-weight: 500; color: var(--flag);
-}
-.gs-waiting-clear { color: var(--ink-dim); font-weight: 400; }
-
-.gs-dot-sun {
-  width: 6px; height: 6px; border-radius: 50%; background: var(--flag);
 }
 
 /* ---------- shell ---------- */
@@ -801,7 +718,7 @@ const CSS = `
   min-width: 17px; padding: 0 5px;
   border-radius: 999px;
   background: var(--flag);
-  color: #FFFFFF;
+  color: var(--on-flag);
   font-size: 11px; font-weight: 700; line-height: 17px; text-align: center;
 }
 
@@ -821,11 +738,11 @@ const CSS = `
   color: inherit; text-align: left; cursor: pointer;
   transition: background 110ms ease;
 }
-.gs-row:hover { background: rgba(22, 36, 28, 0.045); }
+.gs-row:hover { background: var(--hover); }
 
 /* The selected row lifts onto the page surface and gets a green edge, so it
    reads as the thing the center column is showing. */
-.gs-row.is-on { background: var(--card); box-shadow: 0 1px 2px rgba(22, 36, 28, 0.07); }
+.gs-row.is-on { background: var(--card); box-shadow: 0 1px 2px var(--shadow); }
 .gs-row.is-on::before {
   content: '';
   position: absolute; left: 0; top: 6px; bottom: 6px;
@@ -838,7 +755,7 @@ const CSS = `
   width: 32px; height: 32px; border-radius: 50%;
   display: grid; place-items: center;
   background: var(--green-wash);
-  border: 1px solid #D3E0D7;
+  border: 1px solid var(--green-edge);
   color: var(--green);
   font-size: 12px; font-weight: 600; letter-spacing: 0.01em;
 }
@@ -1007,8 +924,8 @@ const CSS = `
    of heavy blocks is hard to scan. Alignment carries who said what. */
 .gs-msg.is-out .gs-bubble {
   background: var(--green-wash);
-  color: #1A4230;
-  border: 1px solid #D3E0D7;
+  color: var(--green-ink);
+  border: 1px solid var(--green-edge);
   border-bottom-right-radius: 4px;
 }
 
@@ -1018,7 +935,7 @@ const CSS = `
 .gs-msg.is-staff .gs-bubble {
   background: var(--green);
   border-color: var(--green);
-  color: #F1F5F1;
+  color: var(--on-green);
 }
 
 .gs-msg-meta {
@@ -1065,7 +982,7 @@ const CSS = `
   flex: 0 0 auto;
   padding: 11px 20px;
   background: var(--green);
-  color: #FFFFFF;
+  color: var(--on-green);
   border: none; border-radius: var(--radius);
   font-size: 14.5px; font-weight: 600;
   cursor: pointer;
@@ -1134,10 +1051,10 @@ const CSS = `
 
 .gs-root ::-webkit-scrollbar { width: 9px; }
 .gs-root ::-webkit-scrollbar-thumb {
-  background: #CFCCC1; border-radius: 999px;
+  background: var(--scroll); border-radius: 999px;
   border: 2px solid transparent; background-clip: content-box;
 }
-.gs-root ::-webkit-scrollbar-thumb:hover { background: #B4B0A2; background-clip: content-box; }
+.gs-root ::-webkit-scrollbar-thumb:hover { background: var(--scroll-lit); background-clip: content-box; }
 
 /* ---------- responsive ---------- */
 

@@ -4,7 +4,23 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>Green Star</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&display=swap"
+    />
+
+    <!-- Apply the saved light/dark choice before first paint so the page never
+         flashes the wrong theme. Same key as src/lib/useTheme.ts. -->
+    <script>
+      try {
+        var m = localStorage.getItem("gs.theme");
+        if (m === "light" || m === "dark") document.documentElement.setAttribute("data-theme", m);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

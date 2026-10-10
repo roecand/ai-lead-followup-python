@@ -1,108 +1,139 @@
+/* ===========================================================================
+   APP TOKENS
+   Every page reads its colors from here. Light is the original warm paper
+   palette. Dark is the deep green-black one. Amber (--flag) means "a person
+   is needed" and nothing else, in both themes.
+
+   Theme selection:
+     no data-theme attribute   follow the OS (Auto)
+     data-theme="light"        forced light
+     data-theme="dark"         forced dark
+   The attribute is set by src/lib/useTheme.ts (and by the small script in
+   index.html before first paint).
+
+   The login screen keeps its own fixed palette on purpose.
+   =========================================================================== */
+
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --paper:       #F5F4EF;  /* page, warm near-white */
+  --card:        #FDFCF9;  /* panels, inbound bubbles */
+  --sink:        #E7E4DB;  /* one step back from the page (inbox rail, tracks) */
+  --ink:         #16241C;  /* primary text */
+  --ink-soft:    #4B5D53;  /* secondary text */
+  --ink-dim:     #7B8A81;  /* tertiary text */
+  --line:        #DEDCD3;  /* hairlines */
+  --line-lit:    #C2BFB2;  /* hairlines on hover */
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  --green:       #1E5138;  /* the accent */
+  --green-lit:   #2A6B4A;  /* accent on hover */
+  --green-mid:   #6E9A82;  /* quiet accent, chart bars */
+  --green-wash:  #E7EFE9;  /* accent as a background tint */
+  --green-edge:  #D3E0D7;  /* border on a wash */
+  --green-ink:   #1A4230;  /* text sitting on a wash */
+  --on-green:    #FFFFFF;  /* text sitting on solid accent */
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --flag:        #A06A12;  /* a person is needed, and nothing else */
+  --flag-wash:   #F5EBD9;
+  --on-flag:     #FFFFFF;
+  --alert:       #A8412A;  /* something went wrong, and nothing else */
 
-  @media (max-width: 1024px) {
-    font-size: 16px;
+  --hover:       rgba(22, 36, 28, 0.045);
+  --shadow:      rgba(22, 36, 28, 0.07);
+  --scroll:      #CFCCC1;
+  --scroll-lit:  #B4B0A2;
+  --grain:       0.03;
+
+  --radius:      4px;
+  --top-h:       56px;
+  --font:        'Familjen Grotesk', system-ui, sans-serif;
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --paper:       #0F1311;
+  --card:        #161B18;
+  --sink:        #0A0D0B;
+  --ink:         #E7ECE8;
+  --ink-soft:    #9AA5A0;
+  --ink-dim:     #78847E;
+  --line:        #262D29;
+  --line-lit:    #36403A;
+
+  --green:       #5EC994;
+  --green-lit:   #7DD6AA;
+  --green-mid:   #3B7D5C;
+  --green-wash:  #15271D;
+  --green-edge:  #24412F;
+  --green-ink:   #CDEBDB;
+  --on-green:    #0B1A12;
+
+  --flag:        #F0A566;
+  --flag-wash:   #2C1E12;
+  --on-flag:     #1E1206;
+  --alert:       #F08A72;
+
+  --hover:       rgba(231, 236, 232, 0.05);
+  --shadow:      rgba(0, 0, 0, 0.4);
+  --scroll:      #2E3632;
+  --scroll-lit:  #44504A;
+  --grain:       0.05;
+
+  color-scheme: dark;
+}
+
+/* Same values as above. CSS can't share a block between an attribute and a
+   media query, so this is the one duplicated chunk. Keep them in step. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:       #0F1311;
+    --card:        #161B18;
+    --sink:        #0A0D0B;
+    --ink:         #E7ECE8;
+    --ink-soft:    #9AA5A0;
+    --ink-dim:     #78847E;
+    --line:        #262D29;
+    --line-lit:    #36403A;
+
+    --green:       #5EC994;
+    --green-lit:   #7DD6AA;
+    --green-mid:   #3B7D5C;
+    --green-wash:  #15271D;
+    --green-edge:  #24412F;
+    --green-ink:   #CDEBDB;
+    --on-green:    #0B1A12;
+
+    --flag:        #F0A566;
+    --flag-wash:   #2C1E12;
+    --on-flag:     #1E1206;
+    --alert:       #F08A72;
+
+    --hover:       rgba(231, 236, 232, 0.05);
+    --shadow:      rgba(0, 0, 0, 0.4);
+    --scroll:      #2E3632;
+    --scroll-lit:  #44504A;
+    --grain:       0.05;
+
+    color-scheme: dark;
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
+/* ---------- base ---------- */
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
+html,
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
-  max-width: 100%;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
 }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-}
-
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
-}
+p { margin: 0; }
