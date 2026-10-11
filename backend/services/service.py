@@ -1,0 +1,207 @@
+import re
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from backend.config import get_settings
+from backend.database import Direction, FollowUp, Lead, LeadStage, Message, Company, Author
+from backend.services.knowledge import BusinessKnowledge
+from backend.services.llm import LLMGateway
+from backend.schemas import ProcessResult, ReplyDecision
+from backend.services.sms import SMSGateway
+from backend.services.connection_manager import manager
+
+import uuid
+
+STOP_WORDS = {"stop", "stopall", "unsubscribe", "cancel", "end", "quit"}
+START_WORDS = {"start", "unstop", "yes"}
+HIGH_RISK = re.compile(r"\b(fire|smoke|gas leak|carbon monoxide|sparks|medical emergency)\b", re.I)
+
+
+class ConversationService:
+    def __init__(self, llm: LLMGateway, sms: SMSGateway, knowledge: BusinessKnowledge):
+        self.llm = llm
+        self.sms = sms
+        self.knowledge = knowledge
+        self.settings = get_settings()
+
+
+    async def _push(self, lead: Lead, msg: Message) -> None:
+        await manager.broadcast(lead.company_id, {
+            "type": "new_message",
+            "lead_id": str(lead.id),
+            "message": {
+                "id": str(msg.id),
+                "lead_id": str(lead.id),
+                "direction": msg.direction.value,
+                "body": msg.body,
+                "intent": msg.intent,
+                "confidence": msg.confidence,
+                "created_at": msg.created_at.isoformat(),
+                "author": msg.author.value,
+            },
+        })
+
+    async def start(self, db: Session, lead: Lead) -> ProcessResult:
+        if lead.opted_out or not lead.consent_to_sms:
+            return ProcessResult(
+                lead_id=lead.id, action="ignored", reason="Documented SMS consent is required"
+            )
+
+        # Check if conversation was already started
+        prior_outbound = db.scalar(select(Message).where(
+            Message.lead_id == lead.id, Message.direction == Direction.OUTBOUND
+        ))
+
+        if prior_outbound:
+            return ProcessResult(
+                lead_id=lead.id, action="duplicate", reason="Conversation was already started"
+            )
+
+        # Temp greeting
+        greeting = f"Hi{f' {lead.first_name}' if lead.first_name else ''}, this is {self.knowledge.name}. How can we help? Reply STOP to opt out."
+
+        company_twilio_phone = lead.company.twilio_number
+        receipt = await self.sms.send(lead.phone, company_twilio_phone, greeting)
+
+        outbound_message = Message(
+            lead_id=lead.id, direction=Direction.OUTBOUND, body=greeting,
+            provider_id=receipt.provider_id, intent="initial_outreach", confidence="high",
+        )
+        db.add(outbound_message)
+        lead.stage = LeadStage.CONTACTED
+        db.add(FollowUp(
+            lead_id=lead.id,
+            due_at=datetime.now(timezone.utc) + timedelta(hours=24),
+            reason="No-response check-in after initial outreach",
+        ))
+        db.commit()
+
+        await self._push(lead, outbound_message)
+
+        return ProcessResult(lead_id=lead.id, action="replied", reply=greeting)
+
+    async def receive(self, db: Session, company: Company, phone: str, body: str, provider_id: str | None = None) -> ProcessResult:
+        normalized = body.strip()
+
+        lead = db.scalar(select(Lead).where(Lead.phone == phone, Lead.company_id == company.id))
+        if lead is None:
+            lead = Lead(phone=phone, source="inbound_demo", consent_to_sms=True, company_id=company.id)
+            db.add(lead)
+            db.flush()
+
+        if provider_id and db.scalar(select(Message).where(Message.provider_id == provider_id)):
+            return ProcessResult(lead_id=lead.id, action="duplicate", reason="Provider event already processed")
+
+        incoming = Message(
+            lead_id=lead.id, direction=Direction.INBOUND, body=normalized, provider_id=provider_id, author=Author.CUSTOMER
+        )
+        db.add(incoming)
+        db.flush()
+        db.commit()
+
+        await self._push(lead, incoming)
+
+        command = normalized.lower().strip(" .!?,")
+        if command in STOP_WORDS:
+            lead.opted_out = True
+            lead.consent_to_sms = False
+            lead.stage = LeadStage.DO_NOT_CONTACT
+            self._cancel_followups(db, lead.id)
+            db.commit()
+            return ProcessResult(lead_id=lead.id, action="opted_out")
+        if command in START_WORDS:
+            lead.opted_out = False
+            lead.consent_to_sms = True
+
+        if lead.opted_out or not lead.consent_to_sms:
+            db.commit()
+            return ProcessResult(lead_id=lead.id, action="ignored", reason="Lead may not be messaged")
+
+
+        if HIGH_RISK.search(normalized):
+            decision = ReplyDecision(
+                reply="Please move to a safe location and call 911 or the appropriate utility emergency line now. I’m flagging this for our team, but don’t wait for a text reply.",
+                intent="emergency", confidence="high", lead_stage=LeadStage.ENGAGED,
+                needs_human=True, human_reason="Potential immediate safety emergency.",
+            )
+        elif lead.ai_paused or lead.human_required:
+            db.commit()
+            return ProcessResult(lead_id=lead.id, action="human_handoff", reason="Waiting on staff")
+        else:
+            history = list(db.scalars(
+                select(Message).where(Message.lead_id == lead.id)
+                .order_by(Message.created_at.desc()).limit(self.settings.history_limit)
+            ))[::-1]
+            try:
+                decision = await self.llm.decide(lead, history, self.knowledge)
+            except Exception as exc:
+                lead.human_required = True
+                db.add(Message(
+                    lead_id=lead.id, direction=Direction.INTERNAL, author=Author.SYSTEM,
+                    body=f"LLM failure; no automated reply sent: {type(exc).__name__}",
+                ))
+                db.commit()
+                return ProcessResult(
+                    lead_id=lead.id, action="human_handoff",
+                    reason="No safe structured model response",
+                )
+
+
+        self._apply_decision(db, lead, decision)
+        company_twilio_phone = company.twilio_number
+
+        try:
+            receipt = await self.sms.send(lead.phone, company_twilio_phone, decision.reply)
+        except Exception:
+            lead.human_required = True
+            db.add(Message(
+                lead_id=lead.id, direction=Direction.INTERNAL, author=Author.SYSTEM,
+                body="SMS send failed; no automated reply delivered.",
+            ))
+            db.commit()
+            return ProcessResult(lead_id=lead.id, action="human_handoff", reason="Message failed to send")
+
+        outbound_message = Message(
+            lead_id=lead.id, direction=Direction.OUTBOUND, body=decision.reply,
+            provider_id=receipt.provider_id, intent=decision.intent, confidence=decision.confidence,
+        )
+
+        db.add(outbound_message)
+        if decision.follow_up_hours and not decision.needs_human:
+            db.add(FollowUp(
+                lead_id=lead.id,
+                due_at=datetime.now(timezone.utc) + timedelta(hours=decision.follow_up_hours),
+                reason=f"Model-suggested follow-up after {decision.intent}",
+            ))
+        db.commit()
+
+        await self._push(lead, outbound_message)
+
+        return ProcessResult(
+            lead_id=lead.id,
+            action="human_handoff" if decision.needs_human else "replied",
+            reply=decision.reply,
+            reason=decision.human_reason,
+        )
+
+    def _apply_decision(self, db: Session, lead: Lead, decision: ReplyDecision) -> None:
+        lead.stage = decision.lead_stage
+        lead.last_intent = decision.intent
+        lead.human_required = decision.needs_human
+        if decision.intent == "not_interested":
+            lead.stage = LeadStage.NURTURE
+            self._cancel_followups(db, lead.id)
+        if decision.needs_human:
+            db.add(Message(
+                lead_id=lead.id, direction=Direction.INTERNAL, author=Author.SYSTEM,
+                body=f"Human handoff: {decision.human_reason or 'model requested review'}",
+            ))
+
+    @staticmethod
+    def _cancel_followups(db: Session, lead_id: uuid.UUID) -> None:
+        for item in db.scalars(select(FollowUp).where(
+            FollowUp.lead_id == lead_id, FollowUp.status == "pending"
+        )):
+            item.status = "cancelled"

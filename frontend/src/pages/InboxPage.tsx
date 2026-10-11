@@ -1,0 +1,158 @@
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import type { Lead, Message } from "../components/ConversationsPage";
+import ConversationsPage from "../components/ConversationsPage";
+import { apiFetch } from "../lib/client";
+import { useLiveFeed } from "../lib/useLiveFeed";
+
+export default function InboxPage() {
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [messagesByLead, setMessagesByLead] = useState<Record<string, Message[]>>({});
+  const [pendingAiToggle, setPendingAiToggle] = useState<Set<string>>(new Set());
+  // /messageboard?lead=<id> opens that thread first (the dashboard links here)
+  const [params] = useSearchParams();
+  const initialLeadId = params.get("lead");
+
+
+  // 1. Pull the user's company's leads
+  useEffect(() => {
+    apiFetch('/company/leads')
+      .then((res) => res.json())
+      .then(setLeads);
+  }, []);
+
+  // Live updates. Reconnects on its own if the connection drops.
+  const live = useLiveFeed((data) => {
+    if (data.type === "new_message") {
+      setMessagesByLead((prev) => {
+        if (!prev[data.lead_id]) return prev;
+        return { ...prev, [data.lead_id]: [...prev[data.lead_id], data.message] };
+      });
+    }
+  });
+
+  // 2 Load messages
+  async function loadThread(leadId: string) {
+    if (messagesByLead[leadId]) return; // Lead messages already loaded
+    const res = await apiFetch(`/leads/${leadId}/messages`);
+    const messages = await res.json();
+    setMessagesByLead((prev) => ({...prev, [leadId]: messages }))
+  }
+
+  // Need to run loadThread initially to pull the messages of the lead selected by default:
+  // the one in ?lead= if it's in the list, otherwise the first lead.
+  useEffect(() => {
+  if (leads.length === 0) return;
+  const firstId =
+    initialLeadId && leads.some((l) => l.id === initialLeadId) ? initialLeadId : leads[0].id;
+  if (messagesByLead[firstId]) return;
+
+  apiFetch(`/leads/${firstId}/messages`)
+    .then((res) => res.json())
+    .then((messages) => {
+      setMessagesByLead((prev) => ({ ...prev, [firstId]: messages }));
+    });
+
+  }, [leads, initialLeadId]);
+
+  // 3 toggle ai off and on
+  async function toggleAi({ leadId, paused }: { leadId: string; paused: boolean }) {
+    if (pendingAiToggle.has(leadId)) return; // already mid-toggle, ignore click
+
+    setPendingAiToggle((prev) => new Set(prev).add(leadId));
+
+    setLeads((prev) =>
+      prev.map((lead) => (lead.id === leadId ? { ...lead, ai_paused: paused } : lead))
+    );
+    try {
+      await apiFetch(`/leads/${leadId}/ai`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paused }),
+      });
+    } catch {
+      // Request failed - revert the UI back to what it actually was
+      setLeads((prev) =>
+        prev.map((lead) => (lead.id === leadId ? { ...lead, ai_paused: !paused } : lead))
+      );
+    } finally {
+      setPendingAiToggle((prev => {
+        const next = new Set(prev);
+        next.delete(leadId);
+        return next;
+      }));
+    }
+  }
+
+  // 4 send staff message
+  async function sendMessage({ leadId, body }: {leadId: string, body: string }){
+    if(!messagesByLead[leadId]) return; // lead messages not loaded yet. unlikely to happen, but safety check
+    const tempId = `temp-${Date.now()}-${Math.random()}`;
+    const optimisticMessage: Message = {
+      id: tempId,
+      lead_id: leadId,
+      direction: "outbound",
+      author: "staff",
+      body: body,
+      intent: null,
+      confidence: null,
+      created_at: new Date().toISOString(),
+    }
+    setMessagesByLead((prev) => ({...prev, [leadId]:[ ...(prev[leadId] ?? []), optimisticMessage ] }));
+
+    const wasAiPaused = leads.find((l) => l.id === leadId)?.ai_paused ?? false;
+    const human_required = !wasAiPaused ?
+        leads.find((l) => l.id === leadId)?.human_required ?? false :
+        false; // Don't waste compute on find if ai was already paused
+
+    if (!wasAiPaused) {
+      setLeads((prev) =>
+          prev.map((lead) => (lead.id === leadId ? { ...lead, ai_paused: true, human_required: false} : lead))
+      );
+    }
+
+    try {
+      const res = await apiFetch(`/leads/${leadId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      if (!res.ok) throw new Error("Send failed");
+    } catch {
+      setMessagesByLead((prev) => ({
+            ...prev,
+            [leadId]: (prev[leadId] ?? []).filter((m) => m.id !== tempId )}),
+      );
+
+      if (!wasAiPaused) {
+        setLeads((prev) =>
+            prev.map((lead) => (lead.id === leadId ? { ...lead, ai_paused: false, human_required: human_required} : lead))
+        );
+      }
+
+      throw new Error("Message failed to send. Check connection and try again");
+    }
+  }
+
+  // 5 resolve lead with button press
+  async function resolveLead(leadId: string) {
+    const res = await apiFetch(`/leads/${leadId}/resolve`, { method: "POST" });
+
+    if (!res.ok) throw new Error("Failed to resolve. Check connection.");
+
+    const updated = await res.json();
+    setLeads((prev) => prev.map((lead) => (lead.id === leadId ? updated : lead)));
+  }
+
+  return <ConversationsPage
+      leads={leads}
+      messagesByLead={messagesByLead}
+      onSelectLead={loadThread}
+      onToggleAi={toggleAi}
+      pendingAiToggles={pendingAiToggle}
+      onSendMessage={sendMessage}
+      onResolveLead={resolveLead}
+      initialLeadId={initialLeadId}
+      live={live}
+  />;
+}
