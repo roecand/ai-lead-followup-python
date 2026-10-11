@@ -3,7 +3,7 @@ export const WS_BASE = API_BASE.replace(/^http/, "ws");
 
 let refreshPromise: Promise<boolean> | null = null;
 
-function refreshToken(): Promise<boolean> {
+export function refreshToken(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = fetch(`${API_BASE}/auth/refresh`, {
       method: "POST",

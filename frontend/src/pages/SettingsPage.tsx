@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AppHeader from "../components/AppHeader";
+import { API_BASE } from "../lib/client";
 import { THEME_CSS } from "../lib/theme";
 import { useTheme, type ThemeMode } from "../lib/useTheme";
 
@@ -65,6 +67,26 @@ export default function SettingsPage() {
   const [activeId, setActiveId] = useState(SECTIONS[0].id);
   const active = SECTIONS.find((s) => s.id === activeId) ?? SECTIONS[0];
 
+  const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+
+  async function handleLogout() {
+    setSigningOut(true);
+    setSignOutError("");
+    try {
+      const res = await fetch(`${API_BASE}/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Logout failed");
+      navigate("/", { replace: true });
+    } catch {
+      setSignOutError("Couldn't sign out. Try again.");
+      setSigningOut(false);
+    }
+  }
+
   return (
     <div className="gs-page">
       <style>{THEME_CSS + CSS}</style>
@@ -77,19 +99,35 @@ export default function SettingsPage() {
         </div>
 
         <div className="st-layout">
-          <nav className="st-nav" aria-label="Settings sections">
-            {SECTIONS.map((s) => (
+          <div className="st-side">
+            <nav className="st-nav" aria-label="Settings sections">
+              {SECTIONS.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={"st-nav-item" + (s.id === activeId ? " is-on" : "")}
+                  aria-current={s.id === activeId ? "true" : undefined}
+                  onClick={() => setActiveId(s.id)}
+                >
+                  {s.title}
+                </button>
+              ))}
+            </nav>
+
+            <div className="st-signout">
               <button
-                key={s.id}
                 type="button"
-                className={"st-nav-item" + (s.id === activeId ? " is-on" : "")}
-                aria-current={s.id === activeId ? "true" : undefined}
-                onClick={() => setActiveId(s.id)}
+                className="st-signout-btn"
+                onClick={handleLogout}
+                disabled={signingOut}
               >
-                {s.title}
+                {signingOut ? "Signing out" : "Sign out"}
               </button>
-            ))}
-          </nav>
+              {signOutError ? (
+                <p className="st-signout-error" role="alert">{signOutError}</p>
+              ) : null}
+            </div>
+          </div>
 
           <section className="gs-card st-panel" aria-labelledby="st-panel-title">
             <h2 id="st-panel-title" className="st-panel-title">{active.title}</h2>
@@ -158,6 +196,8 @@ function AppearancePanel() {
 const CSS = `
 .st-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 24px; align-items: start; }
 
+.st-side { display: flex; flex-direction: column; gap: 14px; }
+
 .st-nav { display: flex; flex-direction: column; gap: 2px; }
 .st-nav-item {
   text-align: left;
@@ -170,6 +210,23 @@ const CSS = `
 }
 .st-nav-item:hover { color: var(--ink); background: var(--hover); }
 .st-nav-item.is-on { color: var(--green); background: var(--green-wash); font-weight: 500; }
+
+.st-signout { padding-top: 14px; border-top: 1px solid var(--line); }
+.st-signout-btn {
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  color: #D64545;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.st-signout-btn:hover:not(:disabled) { background: rgba(214, 69, 69, 0.1); }
+.st-signout-btn:disabled { opacity: 0.5; cursor: default; }
+.st-signout-error { margin: 6px 12px 0; font-size: 12.5px; color: #D64545; }
 
 .st-panel { padding: 24px; }
 .st-panel-title { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }

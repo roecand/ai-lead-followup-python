@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { API_BASE } from "../lib/client";
+import { API_BASE, refreshToken } from "../lib/client";
 
 export default function LoginPage({
   onSignIn,
@@ -19,6 +19,16 @@ export default function LoginPage({
   // --- request state --------------------------------------------------------
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    refreshToken()
+      .then((ok) => {
+        if (ok) navigate("/dashboard", { replace: true });
+        else setChecking(false);
+      })
+      .catch(() => setChecking(false));
+  }, [navigate]);
 
   async function handleSubmit() {
     setError("");
@@ -88,6 +98,8 @@ export default function LoginPage({
   function handleKeyDown(e) {
     if (e.key === "Enter" && !busy) handleSubmit();
   }
+
+  if (checking) return null;
 
   return (
     <div className="lf-root">
