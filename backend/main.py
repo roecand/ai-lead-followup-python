@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .database import create_schema
 from .dependencies import sms_gateway
 from .services.followups import run_due_followups
-from .routers import admin, auth, leads, webhooks, ws
+from .routers import admin, auth, dashboard, leads, webhooks, ws
 
 scheduler = AsyncIOScheduler()
 
@@ -47,3 +47,5 @@ app.include_router(leads.router)
 app.include_router(admin.router)
 app.include_router(webhooks.router)
 app.include_router(ws.router)
+
+app.include_router(dashboard.router)

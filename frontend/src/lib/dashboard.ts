@@ -90,7 +90,7 @@ export interface DashboardData {
    Flip USE_MOCK to false once GET /dashboard/summary exists.
 --------------------------------------------------------------------------- */
 
-const USE_MOCK = true;
+const USE_MOCK = false;
 
 export async function fetchDashboard(): Promise<DashboardData> {
   if (USE_MOCK) {
@@ -98,8 +98,6 @@ export async function fetchDashboard(): Promise<DashboardData> {
     return mockDashboard();
   }
 
-  // TODO(backend): implement GET /dashboard/summary in backend/routers, scoped
-  // to user.company_id like /company/leads, returning DashboardData.
   const res = await apiFetch("/dashboard/summary");
   if (!res.ok) throw new Error("Failed to load dashboard");
   return res.json();
