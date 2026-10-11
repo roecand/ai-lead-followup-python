@@ -908,7 +908,7 @@ const CSS = `
 .gs-bubble {
   max-width: 78%;
   padding: 10px 14px;
-  border-radius: 14px;
+  border-radius: 16px;
   font-size: 14.5px; line-height: 1.5;
   white-space: pre-wrap; word-break: break-word;
 }
@@ -917,7 +917,7 @@ const CSS = `
 .gs-msg.is-in .gs-bubble {
   background: var(--card);
   border: 1px solid var(--line);
-  border-bottom-left-radius: 4px;
+  border-bottom-left-radius: 5px;
 }
 
 /* The assistant. A light wash, because most of the thread is this and a column
@@ -926,7 +926,7 @@ const CSS = `
   background: var(--green-wash);
   color: var(--green-ink);
   border: 1px solid var(--green-edge);
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 5px;
 }
 
 /* A person typed this. Solid fill, because these are the rare ones and they're

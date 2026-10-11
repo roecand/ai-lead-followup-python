@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..database import RefreshToken, User
 from ..dependencies import client_ip, get_db, redis_client
-from ..schemas import LoginRequest
+from ..schemas import LoginRequest, SignupRequest
 from ..security import ACCESS_TOKEN_MINUTES, create_access_token, create_refresh_token, pwd_context
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -107,3 +107,6 @@ async def auth_logout(response: Response, db: Session = Depends(get_db), refresh
         db.commit()
 
     return clear_auth_cookies(Response(status_code=204))
+
+# @router.post("/signup", status_code=201)
+# async def auth_signup(response: Response, db: Session = Depends(get_db), signup_request: SignupRequest):

@@ -104,7 +104,7 @@ class Company(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(160))
-    join_code: Mapped[str] = mapped_column(String(20), unique=True, index=True, default=generate_join_code) # Temp-ish. Possibly have a rotating join code so if the code is leaked, the code can change
+    # join_code: Mapped[str] = mapped_column(String(20), unique=True, index=True, default=generate_join_code) # Temp-ish. Possibly have a rotating join code so if the code is leaked, the code can change
     twilio_number: Mapped[str] = mapped_column(String(32), unique=True)
     timezone: Mapped[str] = mapped_column(String(60), default="America/Los_Angeles")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -120,6 +120,7 @@ class User(Base):
     company_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("companies.id"), index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(160))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     role: Mapped[str] = mapped_column(String(30), default="staff")  # owner / staff, room to grow
 
@@ -134,6 +135,17 @@ class RefreshToken(Base):
     token: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+class JoinCodes(Base):
+    __tablename__ = "join_codes"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    join_code: Mapped[str] = mapped_column(String(20), unique=True, index=True, default=generate_join_code)
+    role: Mapped[str] = mapped_column(String(30), default="staff")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    company: Mapped[Company] = relationship(back_populates="join_codes")
+
 
 
 settings = get_settings()

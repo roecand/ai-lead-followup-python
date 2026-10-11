@@ -1,19 +1,24 @@
 /* ===========================================================================
    APP TOKENS
-   Every page reads its colors from here. Light is the original warm paper
-   palette. Dark is the deep green-black one. Amber (--flag) means "a person
-   is needed" and nothing else, in both themes.
+   Every page reads its colors from here. There is one light theme and four
+   dark ones, picked from the Appearance menu in the header or in Settings.
+   Amber (--flag) means "a person is needed" and nothing else, in every theme.
 
-   Theme selection:
-     no data-theme attribute   follow the OS (Auto)
-     data-theme="light"        forced light
-     data-theme="dark"         forced dark
+   Theme selection (data-theme on <html>):
+     no attribute          follow the OS. Light by day, Original dark at night
+     "light"               Light
+     "original"            Original dark
+     "slate"               Slate dusk
+     "desert"              Desert night
+     "graphite"            Graphite
    The attribute is set by src/lib/useTheme.ts (and by the small script in
-   index.html before first paint).
+   index.html before first paint). To add a theme, add a block below, add it
+   to THEMES in useTheme.ts, and add its name to the list in index.html.
 
    The login screen keeps its own fixed palette on purpose.
    =========================================================================== */
 
+/* Light. Also the default before any theme is chosen. */
 :root {
   --paper:       #F5F4EF;  /* page, warm near-white */
   --card:        #FDFCF9;  /* panels, inbound bubbles */
@@ -43,14 +48,15 @@
   --scroll-lit:  #B4B0A2;
   --grain:       0.03;
 
-  --radius:      4px;
+  --radius:      8px;
   --top-h:       56px;
   --font:        'Familjen Grotesk', system-ui, sans-serif;
 
   color-scheme: light;
 }
 
-:root[data-theme="dark"] {
+/* Original dark. The green-black the app launched with. */
+:root[data-theme="original"] {
   --paper:       #0F1311;
   --card:        #161B18;
   --sink:        #0A0D0B;
@@ -82,10 +88,110 @@
   color-scheme: dark;
 }
 
-/* Same values as above. CSS can't share a block between an attribute and a
-   media query, so this is the one duplicated chunk. Keep them in step. */
+/* Slate dusk. Cool blue grey, like the sky after sunset. */
+:root[data-theme="slate"] {
+  --paper:       #12161C;  /* forest night, same family as the login */
+  --card:        #181E26;  /* panels sit one step up */
+  --sink:        #0D1015;  /* one step back (inbox rail, tracks) */
+  --ink:         #ECE8E0;  /* bone, the login's text color */
+  --ink-soft:    #AEB5BF;
+  --ink-dim:     #858D99;
+  --line:        #252D38;
+  --line-lit:    #38424F;
+
+  --green:       #84C8A8;  /* softer than the old mint so it sits on forest */
+  --green-lit:   #A0D6BD;
+  --green-mid:   #4C7E68;
+  --green-wash:  #18292A;
+  --green-edge:  #27443F;
+  --green-ink:   #D2EBE0;
+  --on-green:    #0E1A17;
+
+  --flag:        #E6B04F;  /* the login's sun, still only for "a person is needed" */
+  --flag-wash:   #2E2618;
+  --on-flag:     #1A1206;
+  --alert:       #EE8A72;
+
+  --hover:       rgba(233, 227, 214, 0.05);
+  --shadow:      rgba(0, 0, 0, 0.4);
+  --scroll:      #2C3542;
+  --scroll-lit:  #424D5C;
+  --grain:       0.05;
+
+  color-scheme: dark;
+}
+
+/* Desert night. Warm brown charcoal. */
+:root[data-theme="desert"] {
+  --paper:       #171411;  /* forest night, same family as the login */
+  --card:        #1F1B17;  /* panels sit one step up */
+  --sink:        #110E0B;  /* one step back (inbox rail, tracks) */
+  --ink:         #ECE5D8;  /* bone, the login's text color */
+  --ink-soft:    #B8AFA1;
+  --ink-dim:     #8F8678;
+  --line:        #2E2924;
+  --line-lit:    #463E36;
+
+  --green:       #8CC5A2;  /* softer than the old mint so it sits on forest */
+  --green-lit:   #A6D3B7;
+  --green-mid:   #4F7B61;
+  --green-wash:  #1E2A22;
+  --green-edge:  #2D4537;
+  --green-ink:   #D5E9DC;
+  --on-green:    #121A15;
+
+  --flag:        #E6B04F;  /* the login's sun, still only for "a person is needed" */
+  --flag-wash:   #352A19;
+  --on-flag:     #1A1206;
+  --alert:       #E8826A;
+
+  --hover:       rgba(233, 227, 214, 0.05);
+  --shadow:      rgba(0, 0, 0, 0.4);
+  --scroll:      #3A332C;
+  --scroll-lit:  #544A40;
+  --grain:       0.05;
+
+  color-scheme: dark;
+}
+
+/* Graphite. Neutral grey with no tint. */
+:root[data-theme="graphite"] {
+  --paper:       #151515;  /* forest night, same family as the login */
+  --card:        #1C1C1D;  /* panels sit one step up */
+  --sink:        #0F0F10;  /* one step back (inbox rail, tracks) */
+  --ink:         #ECE8E0;  /* bone, the login's text color */
+  --ink-soft:    #B0AEAA;
+  --ink-dim:     #8A8884;
+  --line:        #2A2A2B;
+  --line-lit:    #3F3F41;
+
+  --green:       #86C6A0;  /* softer than the old mint so it sits on forest */
+  --green-lit:   #A0D4B5;
+  --green-mid:   #4E7D62;
+  --green-wash:  #1B2A21;
+  --green-edge:  #2A4335;
+  --green-ink:   #D3E8DA;
+  --on-green:    #10201A;
+
+  --flag:        #E6B04F;  /* the login's sun, still only for "a person is needed" */
+  --flag-wash:   #30281A;
+  --on-flag:     #1A1206;
+  --alert:       #E8826A;
+
+  --hover:       rgba(233, 227, 214, 0.05);
+  --shadow:      rgba(0, 0, 0, 0.4);
+  --scroll:      #333335;
+  --scroll-lit:  #4A4A4D;
+  --grain:       0.05;
+
+  color-scheme: dark;
+}
+
+/* Auto at night uses Original dark. Same values as the "original" block.
+   CSS can't share a block between an attribute and a media query, so this is
+   the one duplicated chunk. Keep them in step. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme]) {
     --paper:       #0F1311;
     --card:        #161B18;
     --sink:        #0A0D0B;

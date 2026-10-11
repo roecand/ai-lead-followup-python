@@ -1,5 +1,5 @@
 import { Link, NavLink } from "react-router-dom";
-import { useTheme } from "../lib/useTheme";
+import AppearanceMenu from "./AppearanceMenu";
 
 interface AppHeaderProps {
   /** Leads waiting on a person. Pass it to show the amber count on the right. */
@@ -14,22 +14,24 @@ interface AppHeaderProps {
  * Header for every signed-in page. Styles live in lib/theme.ts.
  */
 export default function AppHeader({ waitingCount, live, onSettings = false }: AppHeaderProps) {
-  const { resolved, setMode } = useTheme();
-  const next = resolved === "dark" ? "light" : "dark";
-
   return (
     <header className="gs-top">
       <div className="gs-top-left">
-        <span className="gs-mark">
-          <svg viewBox="0 0 24 24" width="18" height="18" focusable="false" aria-hidden="true">
-            <g stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" vectorEffect="non-scaling-stroke">
-              <line x1="12" y1="2.5" x2="12" y2="21.5" />
-              <line x1="3.77" y1="7.25" x2="20.23" y2="16.75" />
-              <line x1="3.77" y1="16.75" x2="20.23" y2="7.25" />
+        <Link to="/dashboard" className="gs-mark" aria-label="Meridiem home">
+          <svg viewBox="0 0 24 24" width="20" height="20" focusable="false" aria-hidden="true">
+            <g stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" fill="none">
+              <path d="M5.5 16a6.5 6.5 0 0 1 13 0" />
+              <line x1="2.5" y1="19.5" x2="21.5" y2="19.5" />
+              <line x1="12" y1="4.5" x2="12" y2="6.5" />
+              <line x1="4.8" y1="8.3" x2="6.2" y2="9.7" />
+              <line x1="19.2" y1="8.3" x2="17.8" y2="9.7" />
             </g>
           </svg>
-          <span className="gs-mark-name">Green Star</span>
-        </span>
+          <span className="gs-mark-text">
+            <span className="gs-mark-name">Meridiem</span>
+            <span className="gs-mark-parent">by Green Star</span>
+          </span>
+        </Link>
 
         <nav className="gs-nav" aria-label="Main">
           <NavLink to="/dashboard" className={({ isActive }) => "gs-nav-link" + (isActive ? " is-on" : "")}>
@@ -59,15 +61,7 @@ export default function AppHeader({ waitingCount, live, onSettings = false }: Ap
           </span>
         )}
 
-        <button
-          type="button"
-          className="gs-icon-btn"
-          onClick={() => setMode(next)}
-          aria-label={`Switch to ${next} mode`}
-          title={`Switch to ${next} mode`}
-        >
-          {resolved === "dark" ? <SunIcon /> : <MoonIcon />}
-        </button>
+        <AppearanceMenu />
 
         <Link
           to="/settings"
@@ -83,24 +77,5 @@ export default function AppHeader({ waitingCount, live, onSettings = false }: Ap
         </Link>
       </div>
     </header>
-  );
-}
-
-function SunIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
-         strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-    </svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
-         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-    </svg>
   );
 }
