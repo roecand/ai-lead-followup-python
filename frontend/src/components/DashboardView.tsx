@@ -68,7 +68,6 @@ export default function DashboardView({ data, error, onRetry, live }: DashboardV
 
 /* ---------------------------------------------------------------------------
    LEDE
-   The page answers "do I need to do anything?" before anything else.
 --------------------------------------------------------------------------- */
 
 function Lede({ data }: { data: DashboardData }) {
