@@ -747,4 +747,101 @@ export const AUTH_CSS = `
   .lf-card-compact .lf-hint { font-size: 13px; }
   .lf-card-compact .lf-submit { padding: 13px 16px; font-size: 16.5px; }
 }
+
+/* ===========================================================================
+   VERIFY EMAIL
+   =========================================================================== */
+
+/* Read by screen readers, hidden on screen. */
+.lf-sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Step states on the joining panel. */
+.lf-step.is-done .lf-step-num {
+  background: rgba(217, 164, 65, 0.14);
+  border-color: rgba(217, 164, 65, 0.35);
+}
+.lf-step.is-done .lf-step-title,
+.lf-step.is-done .lf-step-text { opacity: 0.6; }
+
+.lf-step.is-current { background: rgba(217, 164, 65, 0.06); }
+.lf-step.is-current .lf-step-num {
+  background: var(--sun);
+  border-color: var(--sun);
+  color: #14211A;
+}
+
+.lf-step.is-next .lf-step-num { border-color: var(--line-lit); color: var(--sage); }
+.lf-step.is-next .lf-step-title { color: var(--sage); }
+
+/* First and last rows are rounded so the lit row fits the panel's corners. */
+.lf-steps { overflow: hidden; padding: 0; }
+
+.lf-mail-mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 14px;
+  border-radius: 50%;
+  background: rgba(217, 164, 65, 0.12);
+  border: 1px solid rgba(217, 164, 65, 0.35);
+  color: var(--sun);
+}
+
+.lf-sent {
+  margin: -6px 0 18px !important;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--sage);
+}
+.lf-sent strong { color: var(--bone); font-weight: 600; word-break: break-all; }
+
+/* One wide box with spaced digits, easier than six boxes for paste and autofill. */
+.lf-card .lf-input.lf-code {
+  padding: 12px 14px;
+  text-align: center;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em; /* balances the trailing letter-spacing so digits sit centered */
+}
+.lf-card .lf-input.lf-code::placeholder { color: var(--line-lit); }
+
+.lf-notice { color: var(--sun); font-size: 13.5px; line-height: 1.4; }
+
+.lf-resend {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--sage);
+}
+.lf-reveal:disabled {
+  cursor: default;
+  text-decoration: none;
+  opacity: 0.75;
+}
+.lf-reveal:disabled:hover { color: var(--sage); }
+
+.lf-submit-link {
+  display: block;
+  margin-top: 6px;
+  text-align: center;
+  text-decoration: none;
+}
+
+@media (min-width: 1600px) {
+  .lf-mail-mark { width: 48px; height: 48px; }
+  .lf-sent { font-size: 15.5px; }
+  .lf-card .lf-input.lf-code { font-size: 30px; padding: 14px 16px; }
+  .lf-resend { font-size: 14.5px; }
+}
 `;

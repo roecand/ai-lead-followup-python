@@ -65,3 +65,63 @@ export function AuthTop() {
 export function AuthBlank() {
   return <div style={{ minHeight: "100vh", background: "#14211A" }} />;
 }
+
+/* ---------------------------------------------------------------------------
+   The "how joining works" panel on the sign-up and verify pages.
+   `current` is the index of the step the person is on. Steps before it
+   show a check, the current one is lit, and later ones are dimmed.
+--------------------------------------------------------------------------- */
+
+export const JOIN_STEPS = [
+  {
+    title: "Get your invite",
+    text: "It comes by email from whoever set up Meridiem for your company.",
+  },
+  {
+    title: "Create your account",
+    text: "Use the email the invite was sent to, and pick a password.",
+  },
+  {
+    title: "Confirm your email",
+    text: "We send a 6-digit code to make sure the inbox is yours.",
+  },
+  {
+    title: "Pick up where the assistant stops",
+    text: "Conversations that need a person show up in your inbox, marked in amber.",
+  },
+];
+
+export function JoinSteps({ current }: { current: number }) {
+  return (
+    <ol className="lf-steps">
+      {JOIN_STEPS.map((s, i) => {
+        const state = i < current ? "is-done" : i === current ? "is-current" : "is-next";
+        return (
+          <li
+            key={s.title}
+            className={"lf-step " + state}
+            aria-current={i === current ? "step" : undefined}
+          >
+            <span className="lf-step-num" aria-hidden="true">
+              {i < current ? (
+                <svg viewBox="0 0 16 16" width="12" height="12">
+                  <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2"
+                        strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                i + 1
+              )}
+            </span>
+            <span className="lf-step-body">
+              <span className="lf-step-title">
+                {s.title}
+                {i < current ? <span className="lf-sr"> (done)</span> : null}
+              </span>
+              <span className="lf-step-text">{s.text}</span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}

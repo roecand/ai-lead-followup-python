@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 
 from sqlalchemy import Boolean, DateTime, Enum as SqlEnum, ForeignKey, String, Text, UniqueConstraint, create_engine
@@ -104,13 +104,13 @@ class Company(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(160))
-    # join_code: Mapped[str] = mapped_column(String(20), unique=True, index=True, default=generate_join_code) # Temp-ish. Possibly have a rotating join code so if the code is leaked, the code can change
     twilio_number: Mapped[str] = mapped_column(String(32), unique=True)
     timezone: Mapped[str] = mapped_column(String(60), default="America/Los_Angeles")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     users: Mapped[list["User"]] = relationship(back_populates="company")
     leads: Mapped[list["Lead"]] = relationship(back_populates="company")
+    invites: Mapped[list["Invite"]] = relationship(back_populates="company")
 
 
 class User(Base):
@@ -136,15 +136,22 @@ class RefreshToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-class JoinCodes(Base):
-    __tablename__ = "join_codes"
+
+class Invite(Base):
+    __tablename__ = "invites"
+
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("companies.id"), index=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)  # save lowercase, not unique
     join_code: Mapped[str] = mapped_column(String(20), unique=True, index=True, default=generate_join_code)
     role: Mapped[str] = mapped_column(String(30), default="staff")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: utcnow() + timedelta(days=7))
 
-    company: Mapped[Company] = relationship(back_populates="join_codes")
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    used_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+
+    company: Mapped["Company"] = relationship(back_populates="invites")
 
 
 

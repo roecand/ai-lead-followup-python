@@ -27,6 +27,7 @@ async def insert_user(payload: SignupRequest, db: Session = Depends(get_db)) -> 
         email=payload.email,
         hashed_password=pwd_context.hash(payload.password),
         company=company,
+        name=payload.name,
     )
     db.add(user)
     db.commit()

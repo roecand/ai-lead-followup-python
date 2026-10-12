@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta, timezone
+from sqlite3 import IntegrityError
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
 from fastapi.responses import Response, JSONResponse
 from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 
-from ..database import RefreshToken, User
+from ..database import RefreshToken, User, Invite
 from ..dependencies import client_ip, get_db, redis_client
 from ..schemas import LoginRequest, SignupRequest
 from ..security import ACCESS_TOKEN_MINUTES, create_access_token, create_refresh_token, pwd_context
@@ -43,7 +44,8 @@ def unauthorized(detail: str) -> JSONResponse:
 
 @router.post("/login", status_code=204)
 async def auth_login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> None:
-    email_key = f"login_fail:email:{payload.email.strip().lower()}"
+    lower_case_email = payload.email.strip().lower()
+    email_key = f"login_fail:email:{lower_case_email}"
     ip_key = f"login_fail:ip:{client_ip(request)}"
 
     email_limit_hit = await redis_client.check_login(email_key, redis_client.MAX_FAILS_PER_EMAIL)
@@ -52,7 +54,7 @@ async def auth_login(payload: LoginRequest, request: Request, response: Response
     if email_limit_hit or ip_limit_hit:
         raise HTTPException(429, "Too many login attempts. Try again later.")
 
-    user = db.scalar(select(User).where(User.email == payload.email))
+    user = db.scalar(select(User).where(User.email == lower_case_email))
 
     if not user or not pwd_context.verify(payload.password, user.hashed_password):
         raise HTTPException(401, "Invalid email or password")
@@ -108,5 +110,38 @@ async def auth_logout(response: Response, db: Session = Depends(get_db), refresh
 
     return clear_auth_cookies(Response(status_code=204))
 
-# @router.post("/signup", status_code=201)
-# async def auth_signup(response: Response, db: Session = Depends(get_db), signup_request: SignupRequest):
+@router.post("/signup", status_code=201)
+async def auth_signup(signup_request: SignupRequest, db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    invite = db.scalar(select(Invite)
+                       .where(
+                Invite.join_code == signup_request.join_code,
+                            Invite.email == signup_request.email,
+                            Invite.used_at.is_(None),
+                            Invite.expires_at > now,
+                        )
+                        .with_for_update()
+    )
+
+    if not invite:
+        raise HTTPException(400, "Invalid code or email, or the invite has expired.")
+
+    user = User(
+        email=invite.email,
+        hashed_password=pwd_context.hash(signup_request.password),
+        name=signup_request.name,
+        company_id=invite.company_id,
+        role=invite.role,
+    )
+
+    try:
+        db.add(user)
+        db.flush()
+
+        invite.used_at = now
+        invite.used_by = user.id
+
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "An account with this email already exists.")

@@ -85,6 +85,7 @@ class SignupRequest(BaseModel):
     email: str
     password: str
     join_code: str
+    name: str
 
 class CreateCompany(BaseModel):
     name: str
