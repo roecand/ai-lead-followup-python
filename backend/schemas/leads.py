@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from ..database import Direction, LeadStage
+from backend.database import Direction, LeadStage
 import uuid
 
 

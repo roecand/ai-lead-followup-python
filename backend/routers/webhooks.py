@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from twilio.request_validator import RequestValidator
 
 from backend.core.config import get_settings
-from ..database import Company
+from backend.database import Company
 from backend.core.dependencies import get_db, service
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])

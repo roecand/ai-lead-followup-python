@@ -4,7 +4,7 @@ signup flow again and again.
 
 Run it from the project root with the stack up:
 
-    docker compose exec backend uv run --frozen python -m backend.dev_reset_invite you@example.com
+    docker compose exec backend uv run --frozen python -m backend.scripts.dev_reset_invite you@example.com
 
 Optional:  --role owner   (default is staff)
 

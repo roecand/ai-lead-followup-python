@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel
 import uuid
 
-from ..database import Direction
+from backend.database import Direction
 from .leads import LeadView
 
 class DashboardSummary(BaseModel):

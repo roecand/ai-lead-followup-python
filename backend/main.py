@@ -4,10 +4,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import create_schema
+from backend.database import create_schema
 from backend.core.dependencies import sms_gateway
-from .services.followups import run_due_followups
-from .routers import admin, auth, dashboard, leads, webhooks, ws
+from backend.services.followups import run_due_followups
+from backend.routers import admin, auth, dashboard, leads, webhooks, ws
 
 scheduler = AsyncIOScheduler()
 
