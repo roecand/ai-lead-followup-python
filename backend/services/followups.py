@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from backend.database import Direction, FollowUp, Lead, Message, SessionLocal
-from backend.services.sms import SMSGateway
+from backend.integrations.sms import SMSGateway
 
 MAX_FOLLOWUP_ATTEMPTS = 3
 

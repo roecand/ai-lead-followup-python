@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 
 from backend.services.connection_manager import manager
 from ..database import User
-from ..dependencies import get_db
-from ..security import try_decode_access_token
+from backend.core.dependencies import get_db
+from backend.core.security import try_decode_access_token
 
 router = APIRouter()
 

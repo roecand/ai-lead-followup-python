@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 from openai import AsyncOpenAI
 
-from backend.config import get_settings
+from backend.core.config import get_settings
 from backend.database import Lead, Message
 from backend.services.knowledge import BusinessKnowledge
 from backend.schemas import ReplyDecision

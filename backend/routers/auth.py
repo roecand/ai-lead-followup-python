@@ -13,10 +13,10 @@ import hmac
 import hashlib
 
 from ..database import RefreshToken, User, Invite
-from ..dependencies import client_ip, get_db, redis_client
+from backend.core.dependencies import client_ip, get_db, redis_client
 from ..schemas import LoginRequest, SignupRequest, VerifyRequest
-from ..security import ACCESS_TOKEN_MINUTES, create_access_token, create_refresh_token, pwd_context
-from backend.config import get_settings
+from backend.core.security import ACCESS_TOKEN_MINUTES, create_access_token, create_refresh_token, pwd_context
+from backend.core.config import get_settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

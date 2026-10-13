@@ -9,11 +9,11 @@ import asyncio
 from passlib.context import CryptContext
 from sqlalchemy import delete
 
-from .database import Company, FollowUp, Lead, Message, RefreshToken, SessionLocal, User, create_schema
+from backend.database import Company, FollowUp, Lead, Message, RefreshToken, SessionLocal, User, create_schema
 from backend.services.knowledge import load_knowledge
-from backend.services.llm import build_gateway
+from backend.integrations.llm import build_gateway
 from backend.services.service import ConversationService
-from backend.services.sms import build_sms_gateway
+from backend.integrations.sms import build_sms_gateway
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

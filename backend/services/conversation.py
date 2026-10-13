@@ -4,12 +4,12 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.config import get_settings
+from backend.core.config import get_settings
 from backend.database import Direction, FollowUp, Lead, LeadStage, Message, Company, Author
 from backend.services.knowledge import BusinessKnowledge
-from backend.services.llm import LLMGateway
+from backend.integrations.llm import LLMGateway
 from backend.schemas import ProcessResult, ReplyDecision
-from backend.services.sms import SMSGateway
+from backend.integrations.sms import SMSGateway
 from backend.services.connection_manager import manager
 
 import uuid

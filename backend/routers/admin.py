@@ -5,10 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import Company, Lead, User
-from ..dependencies import get_db, require_admin_key, service, sms_gateway
+from backend.core.dependencies import get_db, require_admin_key, service, sms_gateway
 from ..services.followups import run_due_followups
 from ..schemas import CreateCompany, DemoInbound, ProcessResult, SignupRequest
-from ..security import pwd_context
+from backend.core.security import pwd_context
 
 router = APIRouter(tags=["admin"], dependencies=[Depends(require_admin_key)])
 

@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..database import Author, Direction, FollowUp, Lead, LeadStage, Message, User
-from ..dependencies import get_current_user, get_db
+from backend.core.dependencies import get_current_user, get_db
 from ..schemas import (
     DashboardData,
     DashboardSummary,

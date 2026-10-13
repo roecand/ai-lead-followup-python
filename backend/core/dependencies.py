@@ -3,14 +3,14 @@ import uuid
 from fastapi import Cookie, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from .config import get_settings
-from .database import SessionLocal, User
-from .services.knowledge import load_knowledge
-from .services.llm import build_gateway
-from .services.redis_client import RedisClient
-from .security import decode_access_token
-from .services.service import ConversationService
-from .services.sms import build_sms_gateway
+from backend.core.config import get_settings
+from backend.database import SessionLocal, User
+from backend.services.knowledge import load_knowledge
+from backend.integrations.llm import build_gateway
+from backend.integrations.redis_client import RedisClient
+from backend.core.security import decode_access_token
+from backend.services.conversation import ConversationService
+from backend.integrations.sms import build_sms_gateway
 
 
 sms_gateway = build_sms_gateway()

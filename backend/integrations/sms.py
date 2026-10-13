@@ -5,7 +5,7 @@ from uuid import uuid4
 import httpx
 from twilio.rest import Client
 
-from backend.config import get_settings
+from backend.core.config import get_settings
 
 
 @dataclass(frozen=True)
