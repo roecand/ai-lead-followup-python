@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { SLIDE_MS, SlideDirection } from "../lib/slide";
 
 /**
  * The pieces the sign-in and sign-up pages share. The dusk sky behind
@@ -72,7 +73,7 @@ export function AuthBlank() {
    show a check, the current one is lit, and later ones are dimmed.
 --------------------------------------------------------------------------- */
 
-export const JOIN_STEPS = [
+const JOIN_STEPS = [
   {
     title: "Get your invite",
     text: "It comes by email from whoever set up Meridiem for your company.",
@@ -91,22 +92,51 @@ export const JOIN_STEPS = [
   },
 ];
 
+// Pause after the slide lands before the step completes, so the eye has
+// settled on the panel when the check draws in.
+const STEP_DELAY_MS = SLIDE_MS + 150;
+
 export function JoinSteps({ current }: { current: number }) {
+  const direction = useContext(SlideDirection);
+
+  // Moving forward, the page arrives showing the previous step as current,
+  // then completes it. Moving back, or with reduced motion, it just shows
+  // the finished state, since un-checking a step you'd done would look wrong.
+  const [animate] = useState(
+    () =>
+      direction > 0 &&
+      current > 0 &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  const [shown, setShown] = useState(animate ? current - 1 : current);
+
+  useEffect(() => {
+    if (!animate) return;
+    const id = window.setTimeout(() => setShown(current), STEP_DELAY_MS);
+    return () => window.clearTimeout(id);
+  }, [animate, current]);
+
+  // Only the step that just finished draws its check, and only the step that
+  // just became current gets the small pop. Steps already done stay still.
+  const advanced = animate && shown === current;
+
   return (
     <ol className="lf-steps">
       {JOIN_STEPS.map((s, i) => {
-        const state = i < current ? "is-done" : i === current ? "is-current" : "is-next";
+        const state = i < shown ? "is-done" : i === shown ? "is-current" : "is-next";
+        const justDone = advanced && i === current - 1;
+        const justLit = advanced && i === current;
         return (
           <li
             key={s.title}
-            className={"lf-step " + state}
-            aria-current={i === current ? "step" : undefined}
+            className={"lf-step " + state + (justLit ? " is-arriving" : "")}
+            aria-current={i === shown ? "step" : undefined}
           >
             <span className="lf-step-num" aria-hidden="true">
-              {i < current ? (
-                <svg viewBox="0 0 16 16" width="12" height="12">
-                  <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2"
-                        strokeLinecap="round" strokeLinejoin="round" />
+              {i < shown ? (
+                <svg className={"lf-check" + (justDone ? " is-drawing" : "")} viewBox="0 0 16 16" width="12" height="12">
+                  <path d="M3.5 8.5l3 3 6-7" pathLength={1} fill="none" stroke="currentColor"
+                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               ) : (
                 i + 1
@@ -115,7 +145,7 @@ export function JoinSteps({ current }: { current: number }) {
             <span className="lf-step-body">
               <span className="lf-step-title">
                 {s.title}
-                {i < current ? <span className="lf-sr"> (done)</span> : null}
+                {i < shown ? <span className="lf-sr"> (done)</span> : null}
               </span>
               <span className="lf-step-text">{s.text}</span>
             </span>

@@ -87,6 +87,10 @@ class SignupRequest(BaseModel):
     join_code: str
     name: str
 
+class VerifyRequest(BaseModel):
+    email: str
+    code: str
+
 class CreateCompany(BaseModel):
     name: str
     twilio_number: str

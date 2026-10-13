@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     jwt_secret: str
     admin_secret: str
     redis_url: str = "redis://localhost:"
+    verification_secret: str
 
 
 @lru_cache

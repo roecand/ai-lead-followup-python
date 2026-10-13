@@ -1,8 +1,6 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { API_BASE, refreshToken } from "../lib/client";
-import { AUTH_CSS } from "../lib/authStyles";
-import { AuthBackdrop, AuthBlank, AuthTop } from "../components/AuthChrome";
+import { API_BASE } from "../lib/client";
 
 /* ---------------------------------------------------------------------------
    Sample thread shown beside the form. It uses the fictional demo business
@@ -52,30 +50,19 @@ export default function LoginPage({
   // --- request state --------------------------------------------------------
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [checking, setChecking] = useState(true);
 
   // --- sample thread --------------------------------------------------------
-  const [shown, setShown] = useState(0);
+  // With reduced motion the whole thread shows at once, no playback.
+  const [shown, setShown] = useState(() =>
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches ? THREAD.length : 0,
+  );
 
-  // If the browser still holds a valid refresh token, skip the form.
+  // The "already signed in?" check lives in AuthShell now, so it runs once
+  // for login, sign-up and verify together.
+
+  // Play the thread in once the page is on screen.
   useEffect(() => {
-    refreshToken()
-      .then((ok) => {
-        if (ok) navigate("/dashboard", { replace: true });
-        else setChecking(false);
-      })
-      .catch(() => setChecking(false));
-  }, [navigate]);
-
-  // Play the thread in once the form is visible.
-  useEffect(() => {
-    if (checking) return;
-
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) {
-      setShown(THREAD.length);
-      return;
-    }
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const timers: number[] = [];
     let at = 0;
@@ -84,7 +71,7 @@ export default function LoginPage({
       timers.push(window.setTimeout(() => setShown(i + 1), at));
     });
     return () => timers.forEach((t) => window.clearTimeout(t));
-  }, [checking]);
+  }, []);
 
   async function handleSubmit() {
     setError("");
@@ -142,146 +129,137 @@ export default function LoginPage({
     if (e.key === "Enter" && !busy) handleSubmit();
   }
 
-  if (checking) return <AuthBlank />;
-
   const typing = shown < THREAD.length && THREAD[shown].from === "assistant";
 
   return (
-    <div className="lf-root">
-      <style>{AUTH_CSS}</style>
+    <main className="lf-stage">
+      <section className="lf-story" aria-label="Example conversation">
+        <h1 className="lf-headline">No lead waits for morning.</h1>
+        <p className="lf-sub">
+          Meridiem answers every text the moment it lands, books the job, and hands the
+          rest to your team.
+        </p>
 
-      <AuthBackdrop />
-      <AuthTop />
+        <div className="lf-phone" aria-hidden="true">
+          <div className="lf-phone-head">
+            <span className="lf-phone-avatar">SC</span>
+            <span className="lf-phone-who">
+              <span className="lf-phone-name">Summit Climate</span>
+              <span className="lf-phone-meta">Example conversation</span>
+            </span>
+          </div>
 
-      <main className="lf-stage">
-        <section className="lf-story" aria-label="Example conversation">
-          <h1 className="lf-headline">No lead waits for morning.</h1>
-          <p className="lf-sub">
-            Meridiem answers every text the moment it lands, books the job, and hands the
-            rest to your team.
-          </p>
-
-          <div className="lf-phone" aria-hidden="true">
-            <div className="lf-phone-head">
-              <span className="lf-phone-avatar">SC</span>
-              <span className="lf-phone-who">
-                <span className="lf-phone-name">Summit Climate</span>
-                <span className="lf-phone-meta">Example conversation</span>
-              </span>
-            </div>
-
-            {/* Every message is always laid out, just hidden until its turn,
-                so the box is exactly as tall as the full thread and nothing
-                shifts while it plays. */}
-            <div className="lf-thread">
-              {THREAD.map((m, i) => (
-                <div key={i} className={"lf-slot lf-slot-" + m.from}>
-                  <div className={"lf-msg" + (i < shown ? " is-shown" : "")}>
-                    <p className="lf-bubble">{m.text}</p>
-                    <span className="lf-msg-time">
-                      {m.from === "assistant" ? "Meridiem · " : ""}
-                      {m.time}
-                    </span>
-                  </div>
-
-                  {typing && i === shown ? (
-                    <p className="lf-bubble lf-typing">
-                      <span />
-                      <span />
-                      <span />
-                    </p>
-                  ) : null}
+          {/* Every message is always laid out, just hidden until its turn,
+              so the box is exactly as tall as the full thread and nothing
+              shifts while it plays. */}
+          <div className="lf-thread">
+            {THREAD.map((m, i) => (
+              <div key={i} className={"lf-slot lf-slot-" + m.from}>
+                <div className={"lf-msg" + (i < shown ? " is-shown" : "")}>
+                  <p className="lf-bubble">{m.text}</p>
+                  <span className="lf-msg-time">
+                    {m.from === "assistant" ? "Meridiem · " : ""}
+                    {m.time}
+                  </span>
                 </div>
-              ))}
-            </div>
+
+                {typing && i === shown ? (
+                  <p className="lf-bubble lf-typing">
+                    <span />
+                    <span />
+                    <span />
+                  </p>
+                ) : null}
+              </div>
+            ))}
           </div>
-        </section>
-
-        <div className="lf-card">
-          <h2 className="lf-card-title">Sign in</h2>
-
-          <button type="button" className="lf-google" onClick={handleGoogle} disabled={busy}>
-            {/* Swap this for Google's official mark before shipping.
-                Their branding guidelines require the real asset. */}
-            <span className="lf-google-mark">G</span>
-            Continue with Google
-          </button>
-
-          <div className="lf-or">
-            <span>or</span>
-          </div>
-
-          <div className="lf-field">
-            <label className="lf-label" htmlFor="lf-email">
-              Email
-            </label>
-            <input
-              id="lf-email"
-              className="lf-input"
-              type="email"
-              autoComplete="email"
-              value={email}
-              disabled={busy}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-          </div>
-
-          <div className="lf-field">
-            <div className="lf-label-row">
-              <label className="lf-label" htmlFor="lf-password">
-                Password
-              </label>
-              <button type="button" className="lf-reveal" onClick={() => setShowPassword((v) => !v)}>
-                {showPassword ? "Hide" : "Show"}
-              </button>
-            </div>
-            <input
-              id="lf-password"
-              className="lf-input"
-              type={showPassword ? "text" : "password"}
-              autoComplete="current-password"
-              value={password}
-              disabled={busy}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-          </div>
-
-          <div className="lf-options">
-            <label className="lf-remember">
-              <input
-                type="checkbox"
-                checked={remember}
-                disabled={busy}
-                onChange={(e) => setRemember(e.target.checked)}
-              />
-              <span>Remember for 30 days</span>
-            </label>
-
-            <Link className="lf-link" to="/reset-password">
-              Forgot your password?
-            </Link>
-          </div>
-
-          {/* aria-live means a screen reader announces the error when it
-              appears, instead of the user submitting into silence. */}
-          <div className="lf-error-slot" role="alert" aria-live="polite">
-            {error ? <div className="lf-error">{error}</div> : null}
-          </div>
-
-          <button type="button" className="lf-submit" onClick={handleSubmit} disabled={busy}>
-            {busy ? "Signing in" : "Sign in"}
-          </button>
-
-          <p className="lf-foot">
-            Don't have an account?{" "}
-            <Link className="lf-link" to="/signup">
-              Sign up
-            </Link>
-          </p>
         </div>
-      </main>
-    </div>
+      </section>
+
+      <div className="lf-card">
+        <h2 className="lf-card-title">Sign in</h2>
+
+        <button type="button" className="lf-google" onClick={handleGoogle} disabled={busy}>
+          {/* Swap this for Google's official mark before shipping.
+              Their branding guidelines require the real asset. */}
+          <span className="lf-google-mark">G</span>
+          Continue with Google
+        </button>
+
+        <div className="lf-or">
+          <span>or</span>
+        </div>
+
+        <div className="lf-field">
+          <label className="lf-label" htmlFor="lf-email">
+            Email
+          </label>
+          <input
+            id="lf-email"
+            className="lf-input"
+            type="email"
+            autoComplete="email"
+            value={email}
+            disabled={busy}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+        </div>
+
+        <div className="lf-field">
+          <div className="lf-label-row">
+            <label className="lf-label" htmlFor="lf-password">
+              Password
+            </label>
+            <button type="button" className="lf-reveal" onClick={() => setShowPassword((v) => !v)}>
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </div>
+          <input
+            id="lf-password"
+            className="lf-input"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            value={password}
+            disabled={busy}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+        </div>
+
+        <div className="lf-options">
+          <label className="lf-remember">
+            <input
+              type="checkbox"
+              checked={remember}
+              disabled={busy}
+              onChange={(e) => setRemember(e.target.checked)}
+            />
+            <span>Remember for 30 days</span>
+          </label>
+
+          <Link className="lf-link" to="/reset-password">
+            Forgot your password?
+          </Link>
+        </div>
+
+        {/* aria-live means a screen reader announces the error when it
+            appears, instead of the user submitting into silence. */}
+        <div className="lf-error-slot" role="alert" aria-live="polite">
+          {error ? <div className="lf-error">{error}</div> : null}
+        </div>
+
+        <button type="button" className="lf-submit" onClick={handleSubmit} disabled={busy}>
+          {busy ? "Signing in" : "Sign in"}
+        </button>
+
+        <p className="lf-foot">
+          Don't have an account?{" "}
+          <Link className="lf-link" to="/signup">
+            Sign up
+          </Link>
+        </p>
+      </div>
+    </main>
   );
 }

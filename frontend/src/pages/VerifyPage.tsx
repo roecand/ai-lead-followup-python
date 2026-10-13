@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { API_BASE } from "../lib/client";
-import { AUTH_CSS } from "../lib/authStyles";
-import { AuthBackdrop, AuthTop, JoinSteps } from "../components/AuthChrome";
+import { JoinSteps } from "../components/AuthChrome";
 
 /**
  * Step after sign-up. The person types the 6-digit code we emailed them.
@@ -47,7 +46,7 @@ export default function VerifyPage() {
   // Put the cursor back in the box whenever a check finishes. The input is
   // disabled while busy, so focusing it any earlier would do nothing.
   useEffect(() => {
-    if (!busy) inputRef.current?.focus();
+    if (!busy) inputRef.current?.focus({ preventScroll: true });
   }, [busy]);
 
   useEffect(() => {
@@ -75,7 +74,7 @@ export default function VerifyPage() {
       });
 
       if (response.ok) {
-        navigate("/dashboard", { replace: true });
+        navigate("/", { replace: true });
         return;
       }
       if (response.status === 429) {
@@ -97,12 +96,6 @@ export default function VerifyPage() {
     const digits = raw.replace(/\D/g, "").slice(0, CODE_LENGTH);
     setCode(digits);
     if (error) setError("");
-
-    // Submit on its own once the last digit is in.
-    if (digits.length === CODE_LENGTH && submittedRef.current !== digits) {
-      submittedRef.current = digits;
-      verify(digits);
-    }
   }
 
   function handleSubmit(e: FormEvent) {
@@ -131,7 +124,7 @@ export default function VerifyPage() {
         setNotice("A new code is on its way. Earlier codes no longer work.");
         setCode("");
         submittedRef.current = "";
-        inputRef.current?.focus();
+        inputRef.current?.focus({ preventScroll: true });
       }
     } catch {
       setError("Couldn't reach the server. Check your connection and try again.");
@@ -142,94 +135,87 @@ export default function VerifyPage() {
   }
 
   return (
-    <div className="lf-root">
-      <style>{AUTH_CSS}</style>
+    <main className="lf-stage">
+      <section className="lf-story" aria-label="How joining works">
+        <h1 className="lf-headline">One last step.</h1>
+        <p className="lf-sub">
+          Your account is set up. Confirm your email and you'll go straight to your inbox.
+        </p>
+        <JoinSteps current={2} />
+      </section>
 
-      <AuthBackdrop />
-      <AuthTop />
+      {email ? (
+        <form className="lf-card lf-card-compact" onSubmit={handleSubmit} noValidate>
+          <span className="lf-mail-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+                 strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="5.5" width="18" height="13" rx="2" />
+              <path d="M3.5 7l8.5 6 8.5-6" />
+            </svg>
+          </span>
 
-      <main className="lf-stage">
-        <section className="lf-story" aria-label="How joining works">
-          <h1 className="lf-headline">One last step.</h1>
-          <p className="lf-sub">
-            Your account is set up. Confirm your email and you'll go straight to your inbox.
+          <h2 className="lf-card-title">Check your email</h2>
+          <p className="lf-sent">
+            We sent a {CODE_LENGTH}-digit code to <strong>{email}</strong>. It expires in 5 minutes.
           </p>
-          <JoinSteps current={2} />
-        </section>
 
-        {email ? (
-          <form className="lf-card lf-card-compact" onSubmit={handleSubmit} noValidate>
-            <span className="lf-mail-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
-                   strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="5.5" width="18" height="13" rx="2" />
-                <path d="M3.5 7l8.5 6 8.5-6" />
-              </svg>
-            </span>
-
-            <h2 className="lf-card-title">Check your email</h2>
-            <p className="lf-sent">
-              We sent a {CODE_LENGTH}-digit code to <strong>{email}</strong>. It expires in 10 minutes.
-            </p>
-
-            <div className="lf-field">
-              <label className="lf-label" htmlFor="vf-code">Verification code</label>
-              <input
-                ref={inputRef}
-                id="vf-code"
-                className="lf-input lf-code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                pattern="[0-9]*"
-                maxLength={CODE_LENGTH + 4 /* room for a pasted space or dash */}
-                placeholder={"·".repeat(CODE_LENGTH)}
-                value={code}
-                disabled={busy}
-                onChange={(e) => handleChange(e.target.value)}
-              />
-            </div>
-
-            <div className="lf-error-slot" role="alert" aria-live="polite">
-              {error ? (
-                <div className="lf-error">{error}</div>
-              ) : notice ? (
-                <div className="lf-notice">{notice}</div>
-              ) : null}
-            </div>
-
-            <button type="submit" className="lf-submit" disabled={busy || code.length !== CODE_LENGTH}>
-              {busy ? "Checking" : "Verify and continue"}
-            </button>
-
-            <div className="lf-resend">
-              <span>Didn't get it? Check spam, or</span>{" "}
-              <button
-                type="button"
-                className="lf-reveal"
-                onClick={resend}
-                disabled={cooldown > 0 || resending}
-              >
-                {resending ? "sending" : cooldown > 0 ? `resend in ${cooldown}s` : "send a new code"}
-              </button>
-            </div>
-
-            <p className="lf-foot">
-              Wrong email?{" "}
-              <Link className="lf-link" to="/signup">Start over</Link>
-            </p>
-          </form>
-        ) : (
-          <div className="lf-card lf-card-compact">
-            <h2 className="lf-card-title">Nothing to verify here</h2>
-            <p className="lf-sent">
-              This page opens after you create an account or sign in. Sign in with your email and
-              password, and we'll send you a new code if your email still needs confirming.
-            </p>
-            <Link className="lf-submit lf-submit-link" to="/">Go to sign in</Link>
+          <div className="lf-field">
+            <label className="lf-label" htmlFor="vf-code">Verification code</label>
+            <input
+              ref={inputRef}
+              id="vf-code"
+              className="lf-input lf-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]*"
+              maxLength={CODE_LENGTH + 4 /* room for a pasted space or dash */}
+              placeholder={"·".repeat(CODE_LENGTH)}
+              value={code}
+              disabled={busy}
+              onChange={(e) => handleChange(e.target.value)}
+            />
           </div>
-        )}
-      </main>
-    </div>
+
+          <div className="lf-error-slot" role="alert" aria-live="polite">
+            {error ? (
+              <div className="lf-error">{error}</div>
+            ) : notice ? (
+              <div className="lf-notice">{notice}</div>
+            ) : null}
+          </div>
+
+          <button type="submit" className="lf-submit" disabled={busy || code.length !== CODE_LENGTH}>
+            {busy ? "Checking" : "Verify and continue"}
+          </button>
+
+          <div className="lf-resend">
+            <span>Didn't get it? Check spam, or</span>{" "}
+            <button
+              type="button"
+              className="lf-reveal"
+              onClick={resend}
+              disabled={cooldown > 0 || resending}
+            >
+              {resending ? "sending" : cooldown > 0 ? `resend in ${cooldown}s` : "send a new code"}
+            </button>
+          </div>
+
+          <p className="lf-foot">
+            Wrong email?{" "}
+            <Link className="lf-link" to="/signup">Start over</Link>
+          </p>
+        </form>
+      ) : (
+        <div className="lf-card lf-card-compact">
+          <h2 className="lf-card-title">Nothing to verify here</h2>
+          <p className="lf-sent">
+            This page opens after you create an account or sign in. Sign in with your email and
+            password, and we'll send you a new code if your email still needs confirming.
+          </p>
+          <Link className="lf-submit lf-submit-link" to="/">Go to sign in</Link>
+        </div>
+      )}
+    </main>
   );
 }

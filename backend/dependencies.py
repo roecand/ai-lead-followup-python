@@ -7,7 +7,7 @@ from .config import get_settings
 from .database import SessionLocal, User
 from .services.knowledge import load_knowledge
 from .services.llm import build_gateway
-from .services.ratelimit import RedisClient
+from .services.redis_client import RedisClient
 from .security import decode_access_token
 from .services.service import ConversationService
 from .services.sms import build_sms_gateway

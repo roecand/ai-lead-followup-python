@@ -28,6 +28,7 @@ export const AUTH_CSS = `
   color: var(--bone);
   font-family: 'Familjen Grotesk', system-ui, sans-serif;
   overflow: hidden;
+  overflow: clip; /* like hidden, but nothing (not even focus) can scroll it sideways mid-slide */
   -webkit-font-smoothing: antialiased;
 }
 
@@ -640,7 +641,9 @@ export const AUTH_CSS = `
   .lf-typing,
   .lf-typing span,
   .lf-stars::before,
-  .lf-stars::after { animation: none; }
+  .lf-stars::after,
+  .lf-check.is-drawing path,
+  .lf-step.is-arriving .lf-step-num { animation: none; }
 }
 
 /* ===========================================================================
@@ -843,5 +846,57 @@ export const AUTH_CSS = `
   .lf-sent { font-size: 15.5px; }
   .lf-card .lf-input.lf-code { font-size: 30px; padding: 14px 16px; }
   .lf-resend { font-size: 14.5px; }
+}
+
+/* ===========================================================================
+   PAGE SLIDES (AuthShell)
+   =========================================================================== */
+
+/* The leaving page and the arriving page sit in the same grid cell, so they
+   overlap while one slides out and the other slides in. */
+.lf-slides {
+  position: relative;
+  z-index: 1;
+  display: grid;
+}
+
+.lf-slide {
+  grid-area: 1 / 1;
+  min-width: 0;
+  will-change: transform, opacity;
+}
+
+/* ===========================================================================
+   STEP COMPLETES (JoinSteps)
+   A step finishing fades its row, swaps its number for a check that draws
+   itself, and the highlight eases down onto the next row.
+   =========================================================================== */
+
+.lf-step { transition: background-color 450ms ease; }
+.lf-step-num {
+  transition: background-color 450ms ease, border-color 450ms ease, color 450ms ease;
+}
+.lf-step-title,
+.lf-step-text { transition: opacity 450ms ease, color 450ms ease; }
+
+.lf-check.is-drawing path {
+  stroke-dasharray: 1;
+  animation: lf-draw 420ms ease-out both;
+}
+
+@keyframes lf-draw {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* The newly current number gives one small pulse. */
+.lf-step.is-arriving .lf-step-num {
+  animation: lf-pop 420ms ease-out 120ms both;
+}
+
+@keyframes lf-pop {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.16); }
+  100% { transform: scale(1); }
 }
 `;

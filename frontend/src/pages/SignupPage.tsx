@@ -1,8 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { API_BASE, refreshToken } from "../lib/client";
-import { AUTH_CSS } from "../lib/authStyles";
-import { AuthBackdrop, AuthBlank, AuthTop, JoinSteps } from "../components/AuthChrome";
+import { API_BASE } from "../lib/client";
+import { JoinSteps } from "../components/AuthChrome";
 
 /**
  * Sign-up for team members joining a company that already exists.
@@ -32,17 +31,8 @@ export default function SignupPage() {
   // --- request state --------------------------------------------------------
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [checking, setChecking] = useState(true);
 
-  // Already signed in? Then there's nothing to sign up for.
-  useEffect(() => {
-    refreshToken()
-      .then((ok) => {
-        if (ok) navigate("/dashboard", { replace: true });
-        else setChecking(false);
-      })
-      .catch(() => setChecking(false));
-  }, [navigate]);
+  // The "already signed in?" check lives in AuthShell now.
 
   const passwordShort = password.length > 0 && password.length < PASSWORD_MIN;
 
@@ -83,139 +73,130 @@ export default function SignupPage() {
       });
 
       if (!response.ok) throw new Error(await signupError(response));
-      navigate("/dashboard", { replace: true });
+      navigate("/verify", { replace: true, state: { email: email.trim() } });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-up didn't complete. Try again.");
       setBusy(false);
     }
   }
 
-  if (checking) return <AuthBlank />;
-
   return (
-    <div className="lf-root">
-      <style>{AUTH_CSS}</style>
+    <main className="lf-stage">
+      <section className="lf-story" aria-label="How joining works">
+        <h1 className="lf-headline">Join your team on Meridiem.</h1>
+        <p className="lf-sub">
+          Your company is already set up. Use the code from your invite email and you'll see
+          every conversation the moment you're in.
+        </p>
 
-      <AuthBackdrop />
-      <AuthTop />
+        <JoinSteps current={1} />
+      </section>
 
-      <main className="lf-stage">
-        <section className="lf-story" aria-label="How joining works">
-          <h1 className="lf-headline">Join your team on Meridiem.</h1>
-          <p className="lf-sub">
-            Your company is already set up. Use the code from your invite email and you'll see
-            every conversation the moment you're in.
+      <form className="lf-card lf-card-compact" onSubmit={handleSubmit} noValidate>
+        <h2 className="lf-card-title">Create your account</h2>
+
+        <div className="lf-field">
+          <label className="lf-label" htmlFor="su-name">Full name</label>
+          <input
+            id="su-name"
+            className="lf-input"
+            type="text"
+            autoComplete="name"
+            value={name}
+            disabled={busy}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+
+        <div className="lf-field">
+          <label className="lf-label" htmlFor="su-email">Work email</label>
+          <input
+            id="su-email"
+            className="lf-input"
+            type="email"
+            autoComplete="email"
+            inputMode="email"
+            value={email}
+            disabled={busy}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+
+        <div className="lf-field">
+          <div className="lf-label-row">
+            <label className="lf-label" htmlFor="su-password">Password</label>
+            <button type="button" className="lf-reveal" onClick={() => setShowPassword((v) => !v)}>
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </div>
+          <input
+            id="su-password"
+            className="lf-input"
+            type={showPassword ? "text" : "password"}
+            autoComplete="new-password"
+            aria-describedby="su-password-hint"
+            value={password}
+            disabled={busy}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+
+        <div className="lf-field">
+          <label className="lf-label" htmlFor="su-password2">Confirm password</label>
+          <input
+            id="su-password2"
+            className="lf-input"
+            type={showPassword ? "text" : "password"}
+            autoComplete="new-password"
+            aria-invalid={passwordMismatch}
+            aria-describedby="su-password-hint"
+            value={confirmPassword}
+            disabled={busy}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+          <p id="su-password-hint" className={"lf-hint" + (passwordShort || passwordMismatch ? " is-warn" : "")}>
+            {passwordMismatch
+              ? "The passwords don't match yet"
+              : passwordShort
+                ? `At least ${PASSWORD_MIN} characters, ${PASSWORD_MIN - password.length} to go`
+                : `At least ${PASSWORD_MIN} characters`}
           </p>
+        </div>
 
-          <JoinSteps current={1} />
-        </section>
-
-        <form className="lf-card lf-card-compact" onSubmit={handleSubmit} noValidate>
-          <h2 className="lf-card-title">Create your account</h2>
-
-          <div className="lf-field">
-            <label className="lf-label" htmlFor="su-name">Full name</label>
-            <input
-              id="su-name"
-              className="lf-input"
-              type="text"
-              autoComplete="name"
-              value={name}
-              disabled={busy}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-
-          <div className="lf-field">
-            <label className="lf-label" htmlFor="su-email">Work email</label>
-            <input
-              id="su-email"
-              className="lf-input"
-              type="email"
-              autoComplete="email"
-              inputMode="email"
-              value={email}
-              disabled={busy}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-
-          <div className="lf-field">
-            <div className="lf-label-row">
-              <label className="lf-label" htmlFor="su-password">Password</label>
-              <button type="button" className="lf-reveal" onClick={() => setShowPassword((v) => !v)}>
-                {showPassword ? "Hide" : "Show"}
-              </button>
-            </div>
-            <input
-              id="su-password"
-              className="lf-input"
-              type={showPassword ? "text" : "password"}
-              autoComplete="new-password"
-              aria-describedby="su-password-hint"
-              value={password}
-              disabled={busy}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-
-          <div className="lf-field">
-            <label className="lf-label" htmlFor="su-password2">Confirm password</label>
-            <input
-              id="su-password2"
-              className="lf-input"
-              type={showPassword ? "text" : "password"}
-              autoComplete="new-password"
-              aria-invalid={passwordMismatch}
-              aria-describedby="su-password-hint"
-              value={confirmPassword}
-              disabled={busy}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
-            <p id="su-password-hint" className={"lf-hint" + (passwordShort || passwordMismatch ? " is-warn" : "")}>
-              {passwordMismatch
-                ? "The passwords don't match yet"
-                : passwordShort
-                  ? `At least ${PASSWORD_MIN} characters, ${PASSWORD_MIN - password.length} to go`
-                  : `At least ${PASSWORD_MIN} characters`}
-            </p>
-          </div>
-
-          <div className="lf-field">
-            <label className="lf-label" htmlFor="su-code">Invite code</label>
-            <input
-              id="su-code"
-              className="lf-input lf-input-code"
-              type="text"
-              autoComplete="off"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
-              aria-describedby="su-code-hint"
-              value={joinCode}
-              disabled={busy}
-              onChange={(e) => setJoinCode(e.target.value)}
-            />
-            <p id="su-code-hint" className="lf-hint">
-              It's in your invite email. No invite yet? Ask whoever manages Meridiem at your company.
-            </p>
-          </div>
-
-          <div className="lf-error-slot" role="alert" aria-live="polite">
-            {error ? <div className="lf-error">{error}</div> : null}
-          </div>
-
-          <button type="submit" className="lf-submit" disabled={busy}>
-            {busy ? "Creating account" : "Create account"}
-          </button>
-
-          <p className="lf-foot">
-            Already have an account?{" "}
-            <Link className="lf-link" to="/">Sign in</Link>
+        <div className="lf-field">
+          <label className="lf-label" htmlFor="su-code">Invite code</label>
+          <input
+            id="su-code"
+            className="lf-input lf-input-code"
+            type="text"
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-describedby="su-code-hint"
+            value={joinCode}
+            disabled={busy}
+            onChange={(e) => setJoinCode(e.target.value)}
+          />
+          <p id="su-code-hint" className="lf-hint">
+            It's in your invite email. No invite yet? Ask whoever manages Meridiem at your company.
           </p>
-        </form>
-      </main>
-    </div>
+        </div>
+
+        <div className="lf-error-slot" role="alert" aria-live="polite">
+          {error ? <div className="lf-error">{error}</div> : null}
+        </div>
+
+        <button type="submit" className="lf-submit" disabled={busy}>
+          {busy ? "Creating account" : "Create account"}
+        </button>
+
+        <p className="lf-foot">
+          Already have an account?{" "}
+          <Link className="lf-link" to="/">Sign in</Link>
+        </p>
+      </form>
+    </main>
   );
 }
 

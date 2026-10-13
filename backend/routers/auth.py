@@ -1,17 +1,30 @@
+import uuid
 from datetime import datetime, timedelta, timezone
-from sqlite3 import IntegrityError
+from sqlalchemy.exc import IntegrityError
+from typing import TypeVar
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
 from fastapi.responses import Response, JSONResponse
 from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 
+import secrets
+import hmac
+import hashlib
+
 from ..database import RefreshToken, User, Invite
 from ..dependencies import client_ip, get_db, redis_client
-from ..schemas import LoginRequest, SignupRequest
+from ..schemas import LoginRequest, SignupRequest, VerifyRequest
 from ..security import ACCESS_TOKEN_MINUTES, create_access_token, create_refresh_token, pwd_context
+from backend.config import get_settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+MAX_FAILS_PER_EMAIL = 5
+MAX_FAILS_PER_IP = 20
+LOGIN_LOCKOUT_SECONDS = 15 * 60
+
+R = TypeVar("R", bound=Response)
 
 def set_auth_cookies(response: Response, user_id, refresh_value: str, expires_at: datetime) -> None:
     response.set_cookie(
@@ -32,7 +45,7 @@ def set_auth_cookies(response: Response, user_id, refresh_value: str, expires_at
     )
 
 
-def clear_auth_cookies(res: Response) -> Response:
+def clear_auth_cookies(res: R) -> R:
     for key in ("token", "refresh_token"):
         res.delete_cookie(key=key, httponly=True, secure=True, samesite="lax")
     return res
@@ -42,14 +55,28 @@ def unauthorized(detail: str) -> JSONResponse:
     return clear_auth_cookies(JSONResponse(status_code=401, content={"detail": detail}))
 
 
+def generate_code() -> str:
+    return f"{secrets.randbelow(10**6):06d}"
+
+
+def hash_code(email: str, code: str) -> str:
+    secret = get_settings().verification_secret.encode()
+    message = f"{email}|{code}".encode()
+    return hmac.new(secret, message, hashlib.sha256).hexdigest()
+
+
+def code_matches(email: str, submitted: str, stored_hash: str) -> bool:
+    return hmac.compare_digest(hash_code(email, submitted), stored_hash)
+
+
 @router.post("/login", status_code=204)
 async def auth_login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> None:
     lower_case_email = payload.email.strip().lower()
     email_key = f"login_fail:email:{lower_case_email}"
     ip_key = f"login_fail:ip:{client_ip(request)}"
 
-    email_limit_hit = await redis_client.check_login(email_key, redis_client.MAX_FAILS_PER_EMAIL)
-    ip_limit_hit = await redis_client.check_login(ip_key, redis_client.MAX_FAILS_PER_IP)
+    email_limit_hit = await redis_client.hit(email_key, MAX_FAILS_PER_EMAIL, LOGIN_LOCKOUT_SECONDS)
+    ip_limit_hit = await redis_client.hit(ip_key, MAX_FAILS_PER_IP, LOGIN_LOCKOUT_SECONDS)
 
     if email_limit_hit or ip_limit_hit:
         raise HTTPException(429, "Too many login attempts. Try again later.")
@@ -103,7 +130,7 @@ async def auth_refresh(response: Response, db: Session = Depends(get_db), refres
     return None
 
 @router.post("/logout", status_code=204)
-async def auth_logout(response: Response, db: Session = Depends(get_db), refresh_token: str | None = Cookie(default=None)):
+async def auth_logout(db: Session = Depends(get_db), refresh_token: str | None = Cookie(default=None)):
     if refresh_token:
         db.execute(delete(RefreshToken).where(RefreshToken.token == refresh_token))
         db.commit()
@@ -120,28 +147,89 @@ async def auth_signup(signup_request: SignupRequest, db: Session = Depends(get_d
                             Invite.used_at.is_(None),
                             Invite.expires_at > now,
                         )
-                        .with_for_update()
     )
 
     if not invite:
         raise HTTPException(400, "Invalid code or email, or the invite has expired.")
 
-    user = User(
-        email=invite.email,
-        hashed_password=pwd_context.hash(signup_request.password),
+    email = invite.email
+
+    user_exists = db.scalar(select(User).where(User.email == email))
+    if user_exists:
+        raise HTTPException(400, "Email already registered.")
+
+    code = generate_code()
+
+    pending = dict(
         name=signup_request.name,
-        company_id=invite.company_id,
-        role=invite.role,
+        password_hash=pwd_context.hash(signup_request.password),
+        invite_id=str(invite.id),
     )
 
+    await redis_client.save_pending(email, pending)
+    await redis_client.save_code(email, hash_code(email, code))
+
+    print(code)
+
+
+@router.post("/verify-email", status_code=204)
+async def auth_verify_email(verify_request : VerifyRequest, db: Session = Depends(get_db)):
+    email = verify_request.email.strip().lower()
+    code = verify_request.code
+
+    too_many_attempts = await redis_client.too_many_attempts(email)
+
+    # Have user restart process
+    if too_many_attempts:
+        await redis_client.delete_code(email)
+        raise HTTPException(429, "Too many attempts. Request a new code.")
+
+    stored_code = await redis_client.get_code(email)
+
+    if not stored_code:
+        raise HTTPException(400, "Code expired, please return to signup and try again.")
+
+    if not code_matches(email, code, stored_code):
+        raise HTTPException(400, "Invalid code")
+
+    pending = await redis_client.get_pending(email)
+    if not pending:
+        raise HTTPException(400, "Session expired, please return to signup and try again.")
+
+    invite_id = uuid.UUID(pending["invite_id"])
+    hashed_password = pending["password_hash"]
+    name = pending["name"]
+
+    invite = db.scalar(
+        select(Invite)
+        .where(
+            Invite.id == invite_id,
+            Invite.used_at.is_(None),
+            Invite.expires_at > datetime.now(timezone.utc),
+        )
+        .with_for_update()
+    )
+
+    if not invite:
+        raise HTTPException(400, "Invite expired or was already used.")
+
+    user = User(
+        email=email,
+        company_id=invite.company_id,
+        hashed_password=hashed_password,
+        name=name,
+        role=invite.role,
+    )
     try:
         db.add(user)
         db.flush()
-
-        invite.used_at = now
         invite.used_by = user.id
-
+        invite.used_at = datetime.now(timezone.utc)
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(409, "An account with this email already exists.")
+        raise HTTPException(409, "An account with that email already exists. Try signing in.")
+
+    await redis_client.delete_pending(email)
+
+
