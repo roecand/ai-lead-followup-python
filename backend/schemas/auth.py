@@ -14,3 +14,6 @@ class SignupRequest(BaseModel):
 class VerifyRequest(BaseModel):
     email: str
     code: str
+
+class ResendCode(BaseModel):
+    email: str

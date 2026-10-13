@@ -1,11 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { THEMES, useTheme } from "../hooks/useTheme";
 
-/**
- * The list of themes as a radio group. Used inside the header dropdown and on
- * Settings > Appearance, so both always offer the same choices.
- * Styles live in lib/theme.ts under "appearance".
- */
 export function ThemeChoices({ onPicked }: { onPicked?: () => void }) {
   const { mode, setMode } = useTheme();
   const name = useId();

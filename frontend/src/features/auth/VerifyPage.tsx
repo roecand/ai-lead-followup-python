@@ -8,16 +8,18 @@ import { JoinSteps } from "./AuthChrome";
  *
  * How people get here
  *   - Sign-up succeeds:  navigate("/verify", { state: { email } })
- *   - Login finds an unverified account: same call, from LoginPage.
  * React Router keeps that state through a page refresh. Someone who opens
  * /verify directly has no email, so they're pointed back to sign in.
  *
  * Backend contract. Change the paths here if yours differ.
  *   POST VERIFY_PATH  { email, code }  -> 204 and sets the auth cookies
  *                                         400 wrong or expired code
+ *                                         410 sign-up session expired, start over
  *                                         429 too many attempts
- *   POST RESEND_PATH  { email }        -> 204 (always, even for unknown emails)
- *                                         429 asked again too soon
+ *   POST RESEND_PATH  { email }        -> 2xx with no body
+ *                                         410 sign-up session expired, start over
+ *                                         429 cooldown or hourly limit, the
+ *                                             response detail says which
  */
 const VERIFY_PATH = "/auth/verify-email";
 const RESEND_PATH = "/auth/resend-code";
@@ -34,6 +36,8 @@ export default function VerifyPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  // The backend dropped the sign-up session (410), so nothing left to verify.
+  const [expired, setExpired] = useState(false);
 
   // A code was just sent when they arrived, so the cooldown starts right away.
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_S);
@@ -77,6 +81,11 @@ export default function VerifyPage() {
         navigate("/", { replace: true });
         return;
       }
+      if (response.status === 410) {
+        setExpired(true);
+        setBusy(false);
+        return;
+      }
       if (response.status === 429) {
         throw new Error("Too many tries. Request a new code and use that one.");
       }
@@ -116,8 +125,12 @@ export default function VerifyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      if (response.status === 429) {
-        setError("You asked for a code a moment ago. Give it a minute.");
+      if (response.status === 410) {
+        setExpired(true);
+      } else if (response.status === 429) {
+        // Two reasons share this status (cooldown and the hourly limit), so show the server's own wording.
+        const data = await response.json().catch(() => null);
+        setError(data?.detail ?? "You asked for a code a moment ago. Give it a minute.");
       } else if (!response.ok) {
         setError("Couldn't send a new code. Try again.");
       } else {
@@ -139,12 +152,12 @@ export default function VerifyPage() {
       <section className="lf-story" aria-label="How joining works">
         <h1 className="lf-headline">One last step.</h1>
         <p className="lf-sub">
-          Your account is set up. Confirm your email and you'll go straight to your inbox.
+          Almost done. Confirm your email and you'll go straight to your inbox.
         </p>
         <JoinSteps current={2} />
       </section>
 
-      {email ? (
+      {email && !expired ? (
         <form className="lf-card lf-card-compact" onSubmit={handleSubmit} noValidate>
           <span className="lf-mail-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
@@ -208,12 +221,15 @@ export default function VerifyPage() {
         </form>
       ) : (
         <div className="lf-card lf-card-compact">
-          <h2 className="lf-card-title">Nothing to verify here</h2>
+          <h2 className="lf-card-title">{expired ? "Sign-up timed out" : "Nothing to verify here"}</h2>
           <p className="lf-sent">
-            This page opens after you create an account or sign in. Sign in with your email and
-            password, and we'll send you a new code if your email still needs confirming.
+            {expired
+              ? "That sign-up expired, so we cleared it. Start over with your invite code and we'll send a fresh code."
+              : "This page opens right after you sign up. If you already have an account, go back and sign in."}
           </p>
-          <Link className="lf-submit lf-submit-link" to="/">Go to sign in</Link>
+          <Link className="lf-submit lf-submit-link" to={expired ? "/signup" : "/"}>
+            {expired ? "Start over" : "Go to sign in"}
+          </Link>
         </div>
       )}
     </main>

@@ -17,12 +17,16 @@ from backend.deps import client_ip, get_db, redis_client
 from backend.schemas import LoginRequest, SignupRequest, VerifyRequest
 from backend.core.security import ACCESS_TOKEN_MINUTES, create_access_token, create_refresh_token, pwd_context
 from backend.core.config import get_settings
+from backend.schemas.auth import ResendCode
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 MAX_FAILS_PER_EMAIL = 5
 MAX_FAILS_PER_IP = 20
 LOGIN_LOCKOUT_SECONDS = 15 * 60
+
+MAX_CODES_PER_HOUR = 8
+CODE_WINDOW_SECONDS = 60 * 60
 
 R = TypeVar("R", bound=Response)
 
@@ -67,6 +71,16 @@ def hash_code(email: str, code: str) -> str:
 
 def code_matches(email: str, submitted: str, stored_hash: str) -> bool:
     return hmac.compare_digest(hash_code(email, submitted), stored_hash)
+
+
+async def issue_code(email: str) -> None:
+    if await redis_client.hit(f"code_sent:{email}", MAX_CODES_PER_HOUR, CODE_WINDOW_SECONDS):
+        raise HTTPException(429, "Too many codes requested. Try again later.")
+
+    code = generate_code()
+    await redis_client.save_code(email, hash_code(email, code))
+    await redis_client.start_cooldown(email)
+    print(code)  # the email gateway call replaces this later
 
 
 @router.post("/login", status_code=204)
@@ -143,7 +157,7 @@ async def auth_signup(signup_request: SignupRequest, db: Session = Depends(get_d
     invite = db.scalar(select(Invite)
                        .where(
                 Invite.join_code == signup_request.join_code,
-                            Invite.email == signup_request.email,
+                            Invite.email == signup_request.email.strip().lower(),
                             Invite.used_at.is_(None),
                             Invite.expires_at > now,
                         )
@@ -158,7 +172,6 @@ async def auth_signup(signup_request: SignupRequest, db: Session = Depends(get_d
     if user_exists:
         raise HTTPException(400, "Email already registered.")
 
-    code = generate_code()
 
     pending = dict(
         name=signup_request.name,
@@ -167,15 +180,18 @@ async def auth_signup(signup_request: SignupRequest, db: Session = Depends(get_d
     )
 
     await redis_client.save_pending(email, pending)
-    await redis_client.save_code(email, hash_code(email, code))
-
-    print(code)
+    await issue_code(email)
 
 
 @router.post("/verify-email", status_code=204)
 async def auth_verify_email(verify_request : VerifyRequest, db: Session = Depends(get_db)):
     email = verify_request.email.strip().lower()
     code = verify_request.code
+
+    pending = await redis_client.get_pending(email)
+    if not pending:
+        await redis_client.delete_code(email)
+        raise HTTPException(410, "Session expired, please return to signup and try again.")
 
     too_many_attempts = await redis_client.too_many_attempts(email)
 
@@ -192,9 +208,6 @@ async def auth_verify_email(verify_request : VerifyRequest, db: Session = Depend
     if not code_matches(email, code, stored_code):
         raise HTTPException(400, "Invalid code")
 
-    pending = await redis_client.get_pending(email)
-    if not pending:
-        raise HTTPException(400, "Session expired, please return to signup and try again.")
 
     invite_id = uuid.UUID(pending["invite_id"])
     hashed_password = pending["password_hash"]
@@ -232,4 +245,18 @@ async def auth_verify_email(verify_request : VerifyRequest, db: Session = Depend
 
     await redis_client.delete_pending(email)
 
+
+@router.post("/resend-code", status_code=201)
+async def resend_code(payload: ResendCode):
+    email = payload.email.strip().lower()
+
+    pending = await redis_client.get_pending(email)
+    if not pending:
+        await redis_client.delete_code(email)
+        raise HTTPException(410, "Session expired, please return to signup and try again.")
+
+    if await redis_client.cooldown_active(email):
+        raise HTTPException(429, "Cooldown still active, wait 30 seconds before requesting a new code.")
+
+    await issue_code(email)
 
