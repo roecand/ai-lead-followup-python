@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.database import Author, Direction, Lead, Message, User
-from backend.core.dependencies import get_current_user, get_db, sms_gateway
+from backend.deps import get_current_user, get_db, sms_gateway
 from backend.schemas import LeadCreate, LeadView, MessageView, SendMessageRequest, SetAiPaused
 
 router = APIRouter(tags=["leads"])

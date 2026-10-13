@@ -8,7 +8,7 @@ from twilio.request_validator import RequestValidator
 
 from backend.core.config import get_settings
 from backend.database import Company
-from backend.core.dependencies import get_db, service
+from backend.deps import get_db, service
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 

@@ -13,7 +13,7 @@ import hmac
 import hashlib
 
 from backend.database import RefreshToken, User, Invite
-from backend.core.dependencies import client_ip, get_db, redis_client
+from backend.deps import client_ip, get_db, redis_client
 from backend.schemas import LoginRequest, SignupRequest, VerifyRequest
 from backend.core.security import ACCESS_TOKEN_MINUTES, create_access_token, create_refresh_token, pwd_context
 from backend.core.config import get_settings

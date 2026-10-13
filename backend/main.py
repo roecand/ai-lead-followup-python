@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.database import create_schema
-from backend.core.dependencies import sms_gateway
+from backend.deps import sms_gateway
 from backend.services.followups import run_due_followups
 from backend.routers import admin, auth, dashboard, leads, webhooks, ws
 
