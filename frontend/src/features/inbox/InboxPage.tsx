@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { Lead, Message } from "../components/ConversationsPage";
-import ConversationsPage from "../components/ConversationsPage";
-import { apiFetch } from "../lib/client";
-import { useLiveFeed } from "../lib/useLiveFeed";
+import type { Lead, Message } from "./ConversationsPage";
+import ConversationsPage from "./ConversationsPage";
+import { apiFetch } from "../../shared/api/client";
+import { useLiveFeed } from "../../shared/hooks/useLiveFeed";
 
 export default function InboxPage() {
   const [leads, setLeads] = useState<Lead[]>([]);

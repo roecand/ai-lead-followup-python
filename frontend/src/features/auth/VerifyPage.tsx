@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { API_BASE } from "../lib/client";
-import { JoinSteps } from "../components/AuthChrome";
+import { API_BASE } from "../../shared/api/client";
+import { JoinSteps } from "./AuthChrome";
 
 /**
  * Step after sign-up. The person types the 6-digit code we emailed them.

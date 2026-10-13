@@ -1,9 +1,9 @@
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
-import AuthShell from "./components/AuthShell";
-import { AUTH_PATHS, normalizePath } from "./lib/authPaths";
-import DashboardPage from "./pages/DashboardPage";
-import InboxPage from "./pages/InboxPage.tsx";
-import SettingsPage from "./pages/SettingsPage";
+import AuthShell from "../features/auth/AuthShell";
+import { AUTH_PATHS, normalizePath } from "../features/auth/authPaths";
+import DashboardPage from "../features/dashboard/DashboardPage";
+import InboxPage from "../features/inbox/InboxPage.tsx";
+import SettingsPage from "../features/settings/SettingsPage";
 
 /**
  * Sign-in, sign-up and verify all render inside AuthShell, which slides

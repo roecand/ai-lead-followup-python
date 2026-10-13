@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import DashboardView from "../components/DashboardView";
-import { fetchDashboard } from "../lib/dashboard";
-import type { DashboardData } from "../lib/dashboard";
-import { useLiveFeed } from "../lib/useLiveFeed";
+import DashboardView from "./DashboardView";
+import { fetchDashboard } from "./dashboard";
+import type { DashboardData } from "./dashboard";
+import { useLiveFeed } from "../../shared/hooks/useLiveFeed";
 
 /**
  * Loads the dashboard and hands it to the view. All the data plumbing lives in

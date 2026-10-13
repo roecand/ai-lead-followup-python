@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import AppHeader from "./AppHeader";
-import { THEME_CSS } from "../lib/theme";
-import { displayName, initials, intentLabel, previewOf, shortAgo, sourceLabel, stageLabel } from "../lib/format";
+import AppHeader from "../../shared/components/AppHeader";
+import { THEME_CSS } from "../../shared/lib/theme";
+import { displayName, initials, intentLabel, previewOf, shortAgo, sourceLabel, stageLabel } from "../../shared/lib/format";
 
 // TYPES
 

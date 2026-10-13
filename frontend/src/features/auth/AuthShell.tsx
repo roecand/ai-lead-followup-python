@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion, type Variants } from "motion/react";
-import { refreshToken } from "../lib/client";
-import { AUTH_CSS } from "../lib/authStyles";
+import { refreshToken } from "../../shared/api/client";
+import { AUTH_CSS } from "./authStyles";
 import { AuthBackdrop, AuthTop } from "./AuthChrome";
-import { AUTH_PATHS, normalizePath } from "../lib/authPaths";
-import { SLIDE_MS, SlideDirection } from "../lib/slide";
-import LoginPage from "../pages/LoginPage";
-import SignupPage from "../pages/SignupPage";
-import VerifyPage from "../pages/VerifyPage";
+import { AUTH_PATHS, normalizePath } from "./authPaths";
+import { SLIDE_MS, SlideDirection } from "./slide";
+import LoginPage from "./LoginPage";
+import SignupPage from "./SignupPage";
+import VerifyPage from "./VerifyPage";
 
 /**
  * Holds the sign-in, sign-up and verify pages as one sliding scene.

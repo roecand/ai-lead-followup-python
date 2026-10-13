@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { Message } from "../components/ConversationsPage";
-import { WS_BASE } from "./client";
+import type { Message } from "../../features/inbox/ConversationsPage";
+import { WS_BASE } from "../api/client";
 
 /** What /ws sends today. Add event types here as the backend grows. */
 export type LiveEvent = { type: "new_message"; lead_id: string; message: Message };

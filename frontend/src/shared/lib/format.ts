@@ -1,4 +1,4 @@
-import type { Lead, Stage } from "../components/ConversationsPage";
+import type { Lead, Stage } from "../../features/inbox/ConversationsPage";
 
 /** Order the funnel is drawn in. do_not_contact is left out on purpose. */
 export const FUNNEL_STAGES: Stage[] = [

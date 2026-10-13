@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
-import type { DashboardData, DashboardSummary, HandoffItem, RecentItem, FollowUpItem } from "../lib/dashboard";
-import AppHeader from "./AppHeader";
-import { THEME_CSS } from "../lib/theme";
+import type { DashboardData, DashboardSummary, HandoffItem, RecentItem, FollowUpItem } from "./dashboard";
+import AppHeader from "../../shared/components/AppHeader";
+import { THEME_CSS } from "../../shared/lib/theme";
 import {
   FUNNEL_STAGES,
   displayName,
@@ -14,7 +14,7 @@ import {
   sourceLabel,
   stageLabel,
   waitingLabel,
-} from "../lib/format";
+} from "../../shared/lib/format";
 
 interface DashboardViewProps {
   /** null while loading. */

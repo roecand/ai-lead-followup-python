@@ -1,5 +1,5 @@
-import type { Lead, Stage, Author, Direction } from "../components/ConversationsPage";
-import { apiFetch } from "./client";
+import type { Lead, Stage, Author, Direction } from "../inbox/ConversationsPage";
+import { apiFetch } from "../../shared/api/client";
 
 /* ---------------------------------------------------------------------------
    SHAPES

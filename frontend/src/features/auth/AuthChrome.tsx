@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { SLIDE_MS, SlideDirection } from "../lib/slide";
+import { SLIDE_MS, SlideDirection } from "./slide";
 
 /**
  * The pieces the sign-in and sign-up pages share. The dusk sky behind

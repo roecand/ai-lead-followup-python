@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { API_BASE } from "../lib/client";
-import { JoinSteps } from "../components/AuthChrome";
+import { API_BASE } from "../../shared/api/client";
+import { JoinSteps } from "./AuthChrome";
 
 /**
  * Sign-up for team members joining a company that already exists.

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { THEMES, useTheme } from "../lib/useTheme";
+import { THEMES, useTheme } from "../hooks/useTheme";
 
 /**
  * The list of themes as a radio group. Used inside the header dropdown and on

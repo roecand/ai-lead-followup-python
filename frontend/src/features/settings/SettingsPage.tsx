@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import AppHeader from "../components/AppHeader";
-import { API_BASE } from "../lib/client";
-import { THEME_CSS } from "../lib/theme";
-import { ThemeChoices } from "../components/AppearanceMenu";
+import AppHeader from "../../shared/components/AppHeader";
+import { API_BASE } from "../../shared/api/client";
+import { THEME_CSS } from "../../shared/lib/theme";
+import { ThemeChoices } from "../../shared/components/AppearanceMenu";
 
 /**
  * Settings shell. The sections are real navigation, the panels are placeholders

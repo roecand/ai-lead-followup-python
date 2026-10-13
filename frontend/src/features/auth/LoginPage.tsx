@@ -1,6 +1,6 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { API_BASE } from "../lib/client";
+import { API_BASE } from "../../shared/api/client";
 
 /* ---------------------------------------------------------------------------
    Sample thread shown beside the form. It uses the fictional demo business
