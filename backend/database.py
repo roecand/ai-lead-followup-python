@@ -7,7 +7,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
 
-from .config import get_settings
+from backend.core.config import get_settings
 
 import secrets
 

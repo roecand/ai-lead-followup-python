@@ -1,14 +1,14 @@
 import re
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from twilio.request_validator import RequestValidator
 
-from ..config import get_settings
-from ..database import Company
-from ..dependencies import get_db, service
+from backend.core.config import get_settings
+from backend.database import Company
+from backend.deps import get_db, service
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -51,7 +51,7 @@ async def ghl_inbound(request: Request, token: str, db: Session = Depends(get_db
     return Response(status_code=204)
 
 
-@router.post("/webhooks/twilio/inbound")
+@router.post("/twilio/inbound")
 async def twilio_inbound(request: Request, db: Session = Depends(get_db)) -> Response:
     settings = get_settings()
     if not settings.twilio_auth_token:

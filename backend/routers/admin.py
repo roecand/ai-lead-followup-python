@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..database import Company, Lead, User
-from ..dependencies import get_db, require_admin_key, service, sms_gateway
-from ..services.followups import run_due_followups
-from ..schemas import CreateCompany, DemoInbound, ProcessResult, SignupRequest
-from ..security import pwd_context
+from backend.database import Company, Lead, User
+from backend.deps import get_db, require_admin_key, service, sms_gateway
+from backend.services.followups import run_due_followups
+from backend.schemas import CreateCompany, DemoInbound, ProcessResult, SignupRequest
+from backend.core.security import pwd_context
 
 router = APIRouter(tags=["admin"], dependencies=[Depends(require_admin_key)])
 
