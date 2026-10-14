@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { API_BASE } from "../../shared/api/client";
 import { JoinSteps } from "./AuthChrome";
+import { SECURE_ACCOUNT_PATH } from "./authPaths";
 
 /**
  * Step after sign-up. The person types the 6-digit code we emailed them.
@@ -78,7 +79,8 @@ export default function VerifyPage() {
       });
 
       if (response.ok) {
-        navigate("/", { replace: true });
+        // Signed in now. Slide on to the optional authenticator step.
+        navigate(SECURE_ACCOUNT_PATH, { replace: true, state: { fromVerify: true } });
         return;
       }
       if (response.status === 410) {
@@ -152,7 +154,7 @@ export default function VerifyPage() {
       <section className="lf-story" aria-label="How joining works">
         <h1 className="lf-headline">One last step.</h1>
         <p className="lf-sub">
-          Almost done. Confirm your email and you'll go straight to your inbox.
+          Almost done. Confirm your email and your account is ready.
         </p>
         <JoinSteps current={2} />
       </section>

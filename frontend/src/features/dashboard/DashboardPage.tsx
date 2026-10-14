@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import DashboardView from "./DashboardView";
-import { fetchDashboard } from "./dashboard";
+import { claimPrefetchedDashboard, fetchDashboard } from "./dashboard";
 import type { DashboardData } from "./dashboard";
 import { useLiveFeed } from "../../shared/hooks/useLiveFeed";
 
@@ -12,16 +12,21 @@ import { useLiveFeed } from "../../shared/hooks/useLiveFeed";
  * websocket, and a re-render every 30s so "14m ago" style labels keep moving.
  */
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
+  // Coming from sign-up, the data may already be here, so show it on the first frame.
+  const [data, setData] = useState<DashboardData | null>(() => claimPrefetchedDashboard()?.data ?? null);
   const [error, setError] = useState("");
   const [, setTick] = useState(0);
 
   const [reloadKey, setReloadKey] = useState(0);
 
-  // First load, and again after "Try again".
+  // First load, and again after "Try again". The first load reuses a
+  // prefetch from sign-up if there is one. "Try again" always asks fresh.
   useEffect(() => {
     let cancelled = false;
-    fetchDashboard()
+    const pre = reloadKey === 0 ? claimPrefetchedDashboard() : null;
+    if (pre?.data) return;
+
+    (pre?.promise ?? fetchDashboard())
       .then((d) => {
         if (!cancelled) setData(d);
       })

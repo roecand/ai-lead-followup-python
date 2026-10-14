@@ -49,6 +49,19 @@ def set_auth_cookies(response: Response, user_id, refresh_value: str, expires_at
     )
 
 
+def start_session(db: Session, response: Response, user: User, remember: bool = False) -> None:
+    now = datetime.now(timezone.utc)
+    db.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id, RefreshToken.expires_at < now))
+
+    refresh_value = create_refresh_token()
+    refresh_expires = now + (timedelta(days=30) if remember else timedelta(days=1))
+
+    db.add(RefreshToken(user_id=user.id, token=refresh_value, expires_at=refresh_expires))
+    db.commit()
+
+    set_auth_cookies(response, user.id, refresh_value, refresh_expires)
+
+
 def clear_auth_cookies(res: R) -> R:
     for key in ("token", "refresh_token"):
         res.delete_cookie(key=key, httponly=True, secure=True, samesite="lax")
@@ -184,7 +197,7 @@ async def auth_signup(signup_request: SignupRequest, db: Session = Depends(get_d
 
 
 @router.post("/verify-email", status_code=204)
-async def auth_verify_email(verify_request : VerifyRequest, db: Session = Depends(get_db)):
+async def auth_verify_email(verify_request : VerifyRequest, response: Response, db: Session = Depends(get_db)):
     email = verify_request.email.strip().lower()
     code = verify_request.code
 
@@ -244,6 +257,10 @@ async def auth_verify_email(verify_request : VerifyRequest, db: Session = Depend
         raise HTTPException(409, "An account with that email already exists. Try signing in.")
 
     await redis_client.delete_pending(email)
+
+    start_session(db, response, user)
+
+
 
 
 @router.post("/resend-code", status_code=201)

@@ -104,6 +104,61 @@ export async function fetchDashboard(): Promise<DashboardData> {
 }
 
 /* ---------------------------------------------------------------------------
+   PREFETCH
+   The last sign-up step starts loading the dashboard while the person is
+   still on it, so the page has its data the moment they arrive. DashboardPage
+   uses a recent prefetch for its first load instead of asking again.
+--------------------------------------------------------------------------- */
+
+const PREFETCH_FRESH_MS = 60_000;
+// React mounts pages twice in development, a few milliseconds apart. A claim
+// stays valid this long so the second mount gets the same prefetch instead
+// of starting a second request.
+const CLAIM_GRACE_MS = 1_000;
+
+interface Prefetch {
+  promise: Promise<DashboardData>;
+  /** Filled in once the request finishes, so the page can render it on its first frame. */
+  data?: DashboardData;
+  at: number;
+  claimedAt?: number;
+}
+
+let prefetch: Prefetch | null = null;
+
+/** Starts loading the dashboard, or returns the load already in flight. */
+export function prefetchDashboard(): Promise<DashboardData> {
+  if (prefetch && Date.now() - prefetch.at < PREFETCH_FRESH_MS) return prefetch.promise;
+
+  const entry: Prefetch = { promise: fetchDashboard(), at: Date.now() };
+  prefetch = entry;
+  entry.promise.then(
+    (data) => {
+      entry.data = data;
+    },
+    () => {
+      // A failed prefetch is dropped, and the page loads normally.
+      if (prefetch === entry) prefetch = null;
+    },
+  );
+  return entry.promise;
+}
+
+/**
+ * Hands a recent prefetch to the dashboard page, once. Later visits to the
+ * page get null and load fresh, so nobody sees old numbers.
+ */
+export function claimPrefetchedDashboard(): Prefetch | null {
+  const entry = prefetch;
+  if (!entry || Date.now() - entry.at >= PREFETCH_FRESH_MS) return null;
+
+  const now = Date.now();
+  if (entry.claimedAt === undefined) entry.claimedAt = now;
+  else if (now - entry.claimedAt > CLAIM_GRACE_MS) return null;
+  return entry;
+}
+
+/* ---------------------------------------------------------------------------
    MOCK DATA
    Times are relative to now so the page always looks current. Delete this
    whole section when the real endpoint is wired up.

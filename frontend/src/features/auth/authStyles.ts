@@ -899,4 +899,20 @@ export const AUTH_CSS = `
   45%  { transform: scale(1.16); }
   100% { transform: scale(1); }
 }
+
+/* ===========================================================================
+   SECURE ACCOUNT (the optional authenticator step after verify)
+   The setup flow itself is styled in features/security/securityStyles.ts.
+   =========================================================================== */
+
+.lf-secure-later {
+  display: block;
+  margin-top: 8px;
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+
+@media (min-width: 1600px) {
+  .lf-secure-later { font-size: 13.5px; }
+}
 `;

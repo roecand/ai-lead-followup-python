@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { SLIDE_MS, SlideDirection } from "./slide";
 
 /**
@@ -96,44 +96,71 @@ const JOIN_STEPS = [
 // settled on the panel when the check draws in.
 const STEP_DELAY_MS = SLIDE_MS + 150;
 
-export function JoinSteps({ current }: { current: number }) {
+/**
+ * `current` is the index of the step the person is on.
+ *
+ * `between` is for a page that sits between two steps, like the optional
+ * authenticator page. Steps before `current` are done, and step `current`
+ * stays dimmed as up next instead of lit, since what they're doing right
+ * now isn't one of the steps.
+ *
+ * `allDone` checks every step. Flipping it on while the panel is on screen
+ * completes the remaining step right away, with the check drawing in. That's
+ * how the last step gets its check when someone finishes.
+ */
+export function JoinSteps({
+  current: currentProp,
+  between = false,
+  allDone = false,
+}: {
+  current: number;
+  between?: boolean;
+  allDone?: boolean;
+}) {
+  const current = allDone ? JOIN_STEPS.length : currentProp;
   const direction = useContext(SlideDirection);
+  const [reduceMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
   // Moving forward, the page arrives showing the previous step as current,
   // then completes it. Moving back, or with reduced motion, it just shows
   // the finished state, since un-checking a step you'd done would look wrong.
-  const [animate] = useState(
-    () =>
-      direction > 0 &&
-      current > 0 &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
-  const [shown, setShown] = useState(animate ? current - 1 : current);
+  const [animateIn] = useState(() => direction > 0 && current > 0 && !reduceMotion);
+  const [shown, setShown] = useState(animateIn ? current - 1 : current);
+  // The step that most recently finished, so only its check draws.
+  const [justFinished, setJustFinished] = useState<number | null>(null);
+  // After the first catch-up, later steps complete without waiting for a slide.
+  const settled = useRef(!animateIn);
 
   useEffect(() => {
-    if (!animate) return;
-    const id = window.setTimeout(() => setShown(current), STEP_DELAY_MS);
+    if (reduceMotion || shown >= current) return;
+    const id = window.setTimeout(() => {
+      settled.current = true;
+      setJustFinished(current - 1);
+      setShown(current);
+    }, settled.current ? 0 : STEP_DELAY_MS);
     return () => window.clearTimeout(id);
-  }, [animate, current]);
+  }, [current, shown, reduceMotion]);
 
-  // Only the step that just finished draws its check, and only the step that
-  // just became current gets the small pop. Steps already done stay still.
-  const advanced = animate && shown === current;
+  // With reduced motion there's nothing to animate, so show the target state directly.
+  const displayed = reduceMotion ? current : shown;
 
   return (
     <ol className="lf-steps">
       {JOIN_STEPS.map((s, i) => {
-        const state = i < shown ? "is-done" : i === shown ? "is-current" : "is-next";
-        const justDone = advanced && i === current - 1;
-        const justLit = advanced && i === current;
+        const isCurrent = i === displayed && !between;
+        const state = i < displayed ? "is-done" : isCurrent ? "is-current" : "is-next";
+        // Only the step that just finished draws its check, and only the step that
+        // just became current gets the small pop. Steps already done stay still.
+        const justDone = justFinished === i && i < displayed;
+        const justLit = justFinished !== null && isCurrent;
         return (
           <li
             key={s.title}
             className={"lf-step " + state + (justLit ? " is-arriving" : "")}
-            aria-current={i === shown ? "step" : undefined}
+            aria-current={isCurrent ? "step" : undefined}
           >
             <span className="lf-step-num" aria-hidden="true">
-              {i < shown ? (
+              {i < displayed ? (
                 <svg className={"lf-check" + (justDone ? " is-drawing" : "")} viewBox="0 0 16 16" width="12" height="12">
                   <path d="M3.5 8.5l3 3 6-7" pathLength={1} fill="none" stroke="currentColor"
                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -145,7 +172,7 @@ export function JoinSteps({ current }: { current: number }) {
             <span className="lf-step-body">
               <span className="lf-step-title">
                 {s.title}
-                {i < shown ? <span className="lf-sr"> (done)</span> : null}
+                {i < displayed ? <span className="lf-sr"> (done)</span> : null}
               </span>
               <span className="lf-step-text">{s.text}</span>
             </span>

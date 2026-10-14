@@ -1,13 +1,18 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import AppHeader from "../../shared/components/AppHeader";
 import { API_BASE } from "../../shared/api/client";
 import { THEME_CSS } from "../../shared/lib/theme";
 import { ThemeChoices } from "../../shared/components/AppearanceMenu";
+import SecurityPanel from "../security/SecurityPanel";
 
 /**
  * Settings shell. The sections are real navigation, the panels are placeholders
  * that say what will live there. Fill each panel in when its backend exists.
+ *
+ * Each section has its own URL, /settings/<id>, so other pages can link
+ * straight to one (for example /settings/security). Plain /settings opens
+ * the first section.
  */
 
 interface Section {
@@ -56,6 +61,12 @@ const SECTIONS: Section[] = [
     planned: ["Email alerts", "Text alerts", "Which handoffs to alert on"],
   },
   {
+    id: "security",
+    title: "Security",
+    blurb: "How you sign in. This only changes your own account, not the rest of your team.",
+    planned: [],
+  },
+  {
     id: "appearance",
     title: "Appearance",
     blurb: "How the app looks on this device. Saved in this browser only.",
@@ -63,11 +74,14 @@ const SECTIONS: Section[] = [
   },
 ];
 
-export default function SettingsPage() {
-  const [activeId, setActiveId] = useState(SECTIONS[0].id);
-  const active = SECTIONS.find((s) => s.id === activeId) ?? SECTIONS[0];
-
+export function SettingsPage() {
   const navigate = useNavigate();
+  const {section} = useParams();
+  const active = SECTIONS.find((s) => s.id === section) ?? SECTIONS[0];
+  const activeId = active.id;
+  // Replace, not push, so Back leaves Settings instead of stepping through sections.
+  const setActiveId = (id: string) => navigate(`/settings/${id}`, {replace: true});
+
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState("");
 
@@ -80,7 +94,7 @@ export default function SettingsPage() {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Logout failed");
-      navigate("/", { replace: true });
+      navigate("/", {replace: true});
     } catch {
       setSignOutError("Couldn't sign out. Try again.");
       setSigningOut(false);
@@ -88,67 +102,69 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="gs-page">
-      <style>{THEME_CSS + CSS}</style>
-      <AppHeader onSettings />
+      <div className="gs-page">
+        <style>{THEME_CSS + CSS}</style>
+        <AppHeader onSettings/>
 
-      <main className="gs-main">
-        <div className="gs-page-head">
-          <h1 className="gs-page-title">Settings</h1>
-          <p className="gs-page-sub">Company-wide options for your workspace.</p>
-        </div>
-
-        <div className="st-layout">
-          <div className="st-side">
-            <nav className="st-nav" aria-label="Settings sections">
-              {SECTIONS.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className={"st-nav-item" + (s.id === activeId ? " is-on" : "")}
-                  aria-current={s.id === activeId ? "true" : undefined}
-                  onClick={() => setActiveId(s.id)}
-                >
-                  {s.title}
-                </button>
-              ))}
-            </nav>
-
-            <div className="st-signout">
-              <button
-                type="button"
-                className="st-signout-btn"
-                onClick={handleLogout}
-                disabled={signingOut}
-              >
-                {signingOut ? "Signing out" : "Sign out"}
-              </button>
-              {signOutError ? (
-                <p className="st-signout-error" role="alert">{signOutError}</p>
-              ) : null}
-            </div>
+        <main className="gs-main">
+          <div className="gs-page-head">
+            <h1 className="gs-page-title">Settings</h1>
+            <p className="gs-page-sub">Options for your workspace and your own account.</p>
           </div>
 
-          <section className="gs-card st-panel" aria-labelledby="st-panel-title">
-            <h2 id="st-panel-title" className="st-panel-title">{active.title}</h2>
-            <p className="st-panel-blurb">{active.blurb}</p>
+          <div className="st-layout">
+            <div className="st-side">
+              <nav className="st-nav" aria-label="Settings sections">
+                {SECTIONS.map((s) => (
+                    <button
+                        key={s.id}
+                        type="button"
+                        className={"st-nav-item" + (s.id === activeId ? " is-on" : "")}
+                        aria-current={s.id === activeId ? "true" : undefined}
+                        onClick={() => setActiveId(s.id)}
+                    >
+                      {s.title}
+                    </button>
+                ))}
+              </nav>
 
-            {active.id === "appearance" ? (
-              <AppearancePanel />
-            ) : (
-              <div className="st-planned">
-                <p className="st-planned-label">Coming to this page</p>
-                <ul>
-                  {active.planned.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
+              <div className="st-signout">
+                <button
+                    type="button"
+                    className="st-signout-btn"
+                    onClick={handleLogout}
+                    disabled={signingOut}
+                >
+                  {signingOut ? "Signing out" : "Sign out"}
+                </button>
+                {signOutError ? (
+                    <p className="st-signout-error" role="alert">{signOutError}</p>
+                ) : null}
               </div>
-            )}
-          </section>
-        </div>
-      </main>
-    </div>
+            </div>
+
+            <section className="gs-card st-panel" aria-labelledby="st-panel-title">
+              <h2 id="st-panel-title" className="st-panel-title">{active.title}</h2>
+              <p className="st-panel-blurb">{active.blurb}</p>
+
+              {active.id === "appearance" ? (
+                  <AppearancePanel/>
+              ) : active.id === "security" ? (
+                  <SecurityPanel/>
+              ) : (
+                  <div className="st-planned">
+                    <p className="st-planned-label">Coming to this page</p>
+                    <ul>
+                      {active.planned.map((item) => (
+                          <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+              )}
+            </section>
+          </div>
+        </main>
+      </div>
   );
 }
 

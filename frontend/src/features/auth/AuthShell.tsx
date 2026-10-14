@@ -4,23 +4,25 @@ import { AnimatePresence, motion, useReducedMotion, type Variants } from "motion
 import { refreshToken } from "../../shared/api/client";
 import { AUTH_CSS } from "./authStyles";
 import { AuthBackdrop, AuthTop } from "./AuthChrome";
-import { AUTH_PATHS, normalizePath } from "./authPaths";
+import { AUTH_PATHS, SECURE_ACCOUNT_PATH, SIGNED_IN_AUTH_PATHS, normalizePath } from "./authPaths";
 import { SLIDE_MS, SlideDirection } from "./slide";
 import LoginPage from "./LoginPage";
 import SignupPage from "./SignupPage";
 import VerifyPage from "./VerifyPage";
+import SecureAccountPage from "./SecureAccountPage";
 
 /**
- * Holds the sign-in, sign-up and verify pages as one sliding scene.
+ * Holds the sign-in, sign-up, verify and secure-account pages as one
+ * sliding scene.
  *
  * The sky and the top bar stay still. Only the page content slides.
- * Moving forward (login, then signup, then verify) pushes the old page
- * out to the left and brings the new one in from the right. Moving back
- * does the opposite.
+ * Moving forward (login, then signup, then verify, then secure account)
+ * pushes the old page out to the left and brings the new one in from the
+ * right. Moving back does the opposite.
  *
  * App.tsx renders this for any path in AUTH_PATHS, so it stays mounted
- * while you move between those three pages. That's what lets the old
- * page animate out while the new one animates in.
+ * while you move between those pages. That's what lets the old page
+ * animate out while the new one animates in.
  */
 
 const rank = (pathname: string) => AUTH_PATHS.indexOf(normalizePath(pathname));
@@ -53,7 +55,7 @@ export default function AuthShell() {
     setDirection(rank(location.pathname) >= rank(prevPath) ? 1 : -1);
   }
 
-  // One "already signed in?" check for all three pages. It runs once when
+  // One "already signed in?" check for all the pages. It runs once when
   // you first land on any of them, not again on every slide, so the
   // incoming page never flashes blank while a request is in flight.
   // (It deliberately doesn't use navigate(). That function changes on every
@@ -65,7 +67,18 @@ export default function AuthShell() {
       .catch(() => setSession("signed-out"));
   }, []);
 
-  if (session === "signed-in") return <Navigate to="/dashboard" replace />;
+  // The check only describes the page you first landed on. Sliding from
+  // verify to the secure-account page happens after sign-up has signed you
+  // in, so the old "signed-out" answer is stale by then and must not bounce
+  // you. That's why this looks at the landing page, not the current one.
+  const [landedOn] = useState(() => normalizePath(location.pathname));
+  const landedNeedsSession = SIGNED_IN_AUTH_PATHS.includes(landedOn);
+  // Checking the current page too stops the redirect to sign-in from
+  // firing again once it has landed there.
+  const onSignedInPage = SIGNED_IN_AUTH_PATHS.includes(normalizePath(location.pathname));
+
+  if (session === "signed-in" && !landedNeedsSession) return <Navigate to="/dashboard" replace />;
+  if (session === "signed-out" && landedNeedsSession && onSignedInPage) return <Navigate to="/" replace />;
 
   return (
     <div className="lf-root">
@@ -99,6 +112,7 @@ export default function AuthShell() {
                   <Route path="/" element={<LoginPage />} />
                   <Route path="/signup" element={<SignupPage />} />
                   <Route path="/verify" element={<VerifyPage />} />
+                  <Route path={SECURE_ACCOUNT_PATH} element={<SecureAccountPage />} />
                 </Routes>
               </SlideDirection.Provider>
             </motion.div>
