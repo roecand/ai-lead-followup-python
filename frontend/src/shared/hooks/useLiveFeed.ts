@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Message } from "../../features/inbox/ConversationsPage";
+import type { Message } from "../types/lead";
 import { WS_BASE } from "../api/client";
 
 /** What /ws sends today. Add event types here as the backend grows. */

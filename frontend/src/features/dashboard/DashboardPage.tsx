@@ -4,13 +4,6 @@ import { claimPrefetchedDashboard, fetchDashboard } from "./dashboard";
 import type { DashboardData } from "./dashboard";
 import { useLiveFeed } from "../../shared/hooks/useLiveFeed";
 
-/**
- * Loads the dashboard and hands it to the view. All the data plumbing lives in
- * lib/dashboard.ts, so hooking up the backend is a change to that one file.
- *
- * Stays current two ways: a quiet refetch shortly after any new message on the
- * websocket, and a re-render every 30s so "14m ago" style labels keep moving.
- */
 export default function DashboardPage() {
   // Coming from sign-up, the data may already be here, so show it on the first frame.
   const [data, setData] = useState<DashboardData | null>(() => claimPrefetchedDashboard()?.data ?? null);

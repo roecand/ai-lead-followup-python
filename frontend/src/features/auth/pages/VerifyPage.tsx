@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { API_BASE } from "../../shared/api/client";
-import { JoinSteps } from "./AuthChrome";
-import { SECURE_ACCOUNT_PATH } from "./authPaths";
+import { API_BASE } from "../../../shared/api/client";
+import { JoinSteps } from "../components/AuthChrome";
+import { SECURE_ACCOUNT_PATH } from "../authPaths";
 
 /**
  * Step after sign-up. The person types the 6-digit code we emailed them.

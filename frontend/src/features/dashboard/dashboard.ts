@@ -1,4 +1,4 @@
-import type { Lead, Stage, Author, Direction } from "../inbox/ConversationsPage";
+import type { Lead, Stage, Author, Direction } from "../../shared/types/lead";
 import { apiFetch } from "../../shared/api/client";
 
 /* ---------------------------------------------------------------------------

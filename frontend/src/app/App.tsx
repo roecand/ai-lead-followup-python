@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
-import AuthShell from "../features/auth/AuthShell";
-import ArrivalSplash from "../features/auth/ArrivalSplash";
+import AuthShell from "../features/auth/components/AuthShell";
+import ArrivalSplash from "../features/auth/components/ArrivalSplash";
 import { AUTH_PATHS, normalizePath } from "../features/auth/authPaths";
 import DashboardPage from "../features/dashboard/DashboardPage";
 import InboxPage from "../features/inbox/InboxPage.tsx";

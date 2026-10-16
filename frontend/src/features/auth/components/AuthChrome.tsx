@@ -1,10 +1,10 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import { SLIDE_MS, SlideDirection } from "./slide";
+import { SLIDE_MS, SlideDirection } from "../slide";
 
 /**
  * The pieces the sign-in and sign-up pages share. The dusk sky behind
  * everything, and the top bar with the Meridiem mark and the Las Vegas clock.
- * Styles are in lib/authStyles.ts.
+ * Styles are in features/auth/authStyles.ts.
  */
 
 export function AuthBackdrop() {

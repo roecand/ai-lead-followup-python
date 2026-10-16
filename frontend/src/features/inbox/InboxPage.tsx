@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { Lead, Message } from "./ConversationsPage";
+import type { Lead, Message } from "../../shared/types/lead";
 import ConversationsPage from "./ConversationsPage";
 import { apiFetch } from "../../shared/api/client";
 import { useLiveFeed } from "../../shared/hooks/useLiveFeed";

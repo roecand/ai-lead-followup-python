@@ -1,17 +1,10 @@
 import { useSyncExternalStore } from "react";
-import { getPhase, subscribe, type Phase } from "./arrival";
+import { getPhase, subscribe, type Phase } from "../arrival";
 
 /**
- * The hand-off from sign-up to the dashboard. The low dusk sun from the
- * sign-up pages rises and floods the screen, settles into the app's own
- * background with the Meridiem mark, then fades away to show the dashboard.
- * Meridiem means midday, so it goes from dusk to noon.
- *
+ * The hand-off from sign-up to the dashboard.
  * It sits in App.tsx above every route, so it stays on screen while the
  * sign-up scene unmounts and the dashboard mounts underneath it.
- *
- * Start it with playArrival() from ./arrival. The animation times in the
- * CSS below line up with the timings there.
  */
 
 export default function ArrivalSplash() {

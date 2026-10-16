@@ -3,40 +3,7 @@ import AppHeader from "../../shared/components/AppHeader";
 import { THEME_CSS } from "../../shared/lib/theme";
 import { displayName, initials, intentLabel, previewOf, shortAgo, sourceLabel, stageLabel } from "../../shared/lib/format";
 
-// TYPES
-
-export type Stage =
-  | "new" | "contacted" | "engaged" | "qualified"
-  | "booked" | "nurture" | "closed" | "do_not_contact";
-
-export type Direction = "inbound" | "outbound" | "internal";
-
-export type Author = "customer" | "assistant" | "staff" | "system";
-
-export interface Message {
-  id: string;
-  lead_id: string;
-  direction: Direction;
-  author: Author;
-  body: string;
-  intent?: string | null;
-  confidence?: string | null;
-  created_at: string;
-}
-
-export interface Lead {
-  id: string;
-  first_name: string | null;
-  phone: string;
-  source: string;
-  stage: Stage;
-  consent_to_sms: boolean;
-  opted_out: boolean;
-  human_required: boolean;
-  last_intent: string | null;
-  created_at: string;
-  ai_paused?: boolean;
-}
+import type { Lead, Message } from "../../shared/types/lead";
 
 interface ConversationsPageProps {
   leads?: Lead[];
@@ -630,7 +597,6 @@ function dayLabel(iso: string) {
    Change the tokens there to restyle the whole app without touching markup.
    =========================================================================== */
 const CSS = `
-/* Colors come from the tokens in src/index.css. Header styles live in lib/theme.ts. */
 .gs-root {
   position: relative;
   height: 100vh;

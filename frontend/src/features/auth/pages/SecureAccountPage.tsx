@@ -1,12 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { prefetchDashboard } from "../dashboard/dashboard";
-import { SECURITY_CSS } from "../security/securityStyles";
-import { JoinSteps } from "./AuthChrome";
-import { playArrival } from "./arrival";
+import { prefetchDashboard } from "../../dashboard/dashboard";
+import { SECURITY_CSS } from "../../security/securityStyles";
+import { JoinSteps } from "../components/AuthChrome";
+import { playArrival } from "../arrival";
 
 // Loaded only when someone picks setup, so the QR code library stays out of the main bundle.
-const TotpSetup = lazy(() => import("../security/TotpSetup"));
+const TotpSetup = lazy(() => import("../../security/TotpSetup"));
 
 /**
  * Step after verify. The account exists and they're signed in, so this offers

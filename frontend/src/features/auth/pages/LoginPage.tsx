@@ -1,6 +1,6 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { API_BASE } from "../../shared/api/client";
+import { API_BASE } from "../../../shared/api/client";
 
 /* ---------------------------------------------------------------------------
    Sample thread shown beside the form. It uses the fictional demo business
@@ -41,17 +41,17 @@ export default function LoginPage({
 }) {
   const navigate = useNavigate();
 
-  // --- form state -----------------------------------------------------------
+  // --- form state
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
 
-  // --- request state --------------------------------------------------------
+  // --- request state
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // --- sample thread --------------------------------------------------------
+  // --- sample thread
   // With reduced motion the whole thread shows at once, no playback.
   const [shown, setShown] = useState(() =>
     window.matchMedia("(prefers-reduced-motion: reduce)").matches ? THREAD.length : 0,

@@ -409,9 +409,6 @@ function ArrowIcon({ up }: { up: boolean }) {
   );
 }
 
-/* ---------------------------------------------------------------------------
-   STYLES (dashboard only. Tokens live in index.css, header in lib/theme.ts)
---------------------------------------------------------------------------- */
 
 const CSS = `
 .db-stack { display: flex; flex-direction: column; gap: 16px; }

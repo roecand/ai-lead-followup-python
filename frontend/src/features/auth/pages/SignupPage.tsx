@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { API_BASE } from "../../shared/api/client";
-import { JoinSteps } from "./AuthChrome";
+import { API_BASE } from "../../../shared/api/client";
+import { JoinSteps } from "../components/AuthChrome";
 
 /**
  * Sign-up for team members joining a company that already exists.
@@ -12,7 +12,7 @@ import { JoinSteps } from "./AuthChrome";
  * setting the same cookies as /auth/login.
  */
 
-// Keep these in step with SignupRequest in backend/schemas.py.
+// Keep these in step with SignupRequest in backend/schemas/.
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 72; // bcrypt only reads the first 72 bytes
 
@@ -20,7 +20,7 @@ export default function SignupPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
 
-  // --- form state -----------------------------------------------------------
+  // --- form state
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,7 +28,7 @@ export default function SignupPage() {
   const [joinCode, setJoinCode] = useState(() => params.get("code")?.trim() ?? "");
   const [showPassword, setShowPassword] = useState(false);
 
-  // --- request state --------------------------------------------------------
+  // --- request state
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 

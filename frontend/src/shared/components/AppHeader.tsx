@@ -2,17 +2,12 @@ import { Link, NavLink } from "react-router-dom";
 import AppearanceMenu from "./AppearanceMenu";
 
 interface AppHeaderProps {
-  /** Leads waiting on a person. Pass it to show the amber count on the right. */
   waitingCount?: number;
-  /** Websocket state. Pass it on pages that listen live to show Live / Offline. */
   live?: boolean;
-  /** Set to true on the settings page so the cog stays lit. */
   onSettings?: boolean;
 }
 
-/**
- * Header for every signed-in page. Styles live in lib/theme.ts.
- */
+// Header for every signed-in page. Styles live in shared/lib/theme.ts.
 export default function AppHeader({ waitingCount, live, onSettings = false }: AppHeaderProps) {
   return (
     <header className="gs-top">
