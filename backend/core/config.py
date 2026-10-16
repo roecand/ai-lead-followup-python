@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     admin_secret: str
     redis_url: str = "redis://localhost:"
     verification_secret: str
+    twofa_encryption_key: str
 
 
 @lru_cache

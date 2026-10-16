@@ -28,7 +28,7 @@ async def totp_confirm(body: CodeIn, user: User = Depends(get_current_user), db:
     if await redis_client.hit(f"totp_confirm_{user.id}", TOTP_LIMIT, TOTP_LOCKOUT):
         raise HTTPException(429, "Too many tries. Wait a few minutes and start again.")
 
-    secret = await redis_client.get(f"totp_confirm_{user.id}")
+    secret = await redis_client.get_totp_pending(f"user.id")
     if not secret:
         raise HTTPException(410, "Setup expired. Start again.")
     if not await check_code(user.id, secret, body.code):
@@ -38,8 +38,9 @@ async def totp_confirm(body: CodeIn, user: User = Depends(get_current_user), db:
     db.execute(delete(RecoveryCode).where(RecoveryCode.user_id == user.id)) # Clear any old codes in case user had any previously
     db.add_all(RecoveryCode(user_id=user.id, code_hash=h) for h in hashes)
 
-    user.totp_secret = encrypt(secret)
+    user.totp_secret_enc = encrypt(secret)
     user.totp_enabled = True
     db.commit()
 
-    await redis_client.delete(user.id)
+    await redis_client.delete_totp_pending(user.id)
+    return {"recovery_codes": codes}
