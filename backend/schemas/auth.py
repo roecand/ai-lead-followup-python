@@ -24,3 +24,6 @@ class VerifyRequest(BaseModel):
 
 class ResendCode(BaseModel):
     email: str
+
+class CodeIn(BaseModel):
+    code: str

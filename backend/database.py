@@ -124,7 +124,19 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     role: Mapped[str] = mapped_column(String(30), default="staff")  # owner / staff, room to grow
 
+    totp_secret_enc: Mapped[str | None] = mapped_column(String(255), default=None)
+    totp_enabled: Mapped[bool] = mapped_column(default=False)
+
     company: Mapped[Company] = relationship(back_populates="users")
+
+
+class RecoveryCode(Base):
+    __tablename__ = "recovery_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=None)
 
 
 class RefreshToken(Base):

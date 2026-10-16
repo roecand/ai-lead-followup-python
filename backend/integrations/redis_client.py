@@ -10,6 +10,9 @@ class RedisClient:
     COOLDOWN_SECONDS = 30           # wait between sending codes
     MAX_CODE_ATTEMPTS = 10
 
+    TOTP_PENDING_TTL_SECONDS = 10 * 60
+    TOTP_USED_TTL_SECONDS = 2 * 60
+
     def __init__(self):
         self.redis_client = redis.from_url(get_settings().redis_url, decode_responses=True)
 
@@ -43,7 +46,7 @@ class RedisClient:
     async def delete(self, key: str) -> None:
         await self.redis_client.delete(key)
 
-
+    # ---- Email varification on signup
     async def save_pending(self, email: str, payload: dict) -> None:
         key = self._pending_key(email)
         async with self.redis_client.pipeline() as pipe:
@@ -94,3 +97,20 @@ class RedisClient:
             self._code_key(email),
             self._attempts_key(email),
         )
+
+    # ---- Totp setup
+    async def save_totp_pending(self, user_id, secret: str) -> None:
+        await self.redis_client.set(f"totp_pending_{user_id}", secret, ex=self.TOTP_PENDING_TTL_SECONDS)
+
+    async def get_totp_pending(self, user_id: str) -> str | None:
+        return await self.redis_client.get(f"totp_pending_{user_id}")
+
+    async def delete_totp_pending(self, user_id: str) -> None:
+        await self.redis_client.delete(f"totp_pending_{user_id}")
+
+    async def claim_totp_step(self, user_id, step: int) -> bool:
+        """True the first time a 30 second step is used, False if it was already used. Prevents using the same code twice"""
+        return bool(
+            await self.redis_client.set(f"totp_used_{user_id}_{step}", "1", nx=True, ex=self.TOTP_USED_TTL_SECONDS))
+
+
