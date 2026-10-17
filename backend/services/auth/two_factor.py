@@ -47,13 +47,16 @@ async def check_code(user_id: uuid.UUID, secret: str, code: str) -> bool:
 
 
 def hash_recovery_code(code: str) -> str:
-    return hashlib.sha256(code.replace("-", "").lower().encode()).hexdigest()
-
+    secret = get_settings().verification_secret.encode()
+    normalized = code.strip().replace("-", "").replace(" ", "").lower().encode()
+    return hmac.new(secret, normalized, hashlib.sha256).hexdigest()
 
 def make_recovery_codes(count: int = 10) -> tuple[list[str], list[str]]:
-    codes = [f"{secrets.token_hex(3)}-{secrets.token_hex(3)}" for _ in range(count)]
+    codes = [f"{secrets.token_hex(5)}-{secrets.token_hex(5)}" for _ in range(count)]
     return codes, [hash_recovery_code(c) for c in codes]
 
 
 def second_factor_method(user: User) -> str:
     return "totp" if user.totp_enabled else "email"
+
+

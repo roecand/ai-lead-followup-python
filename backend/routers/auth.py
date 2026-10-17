@@ -4,18 +4,18 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
 from fastapi.responses import Response
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, update
 from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse
 
-from backend.database import RefreshToken, User
+from backend.database import RefreshToken, User, RecoveryCode
 from backend.deps import client_ip, get_db, redis_client
 from backend.integrations.redis_client import RedisClient
 from backend.schemas import LoginRequest
 from backend.core.security import create_refresh_token, pwd_context
 from backend.schemas.auth import CodeIn
 from backend.services.auth.sessions import set_auth_cookies, unauthorized, clear_auth_cookies, start_session
-from backend.services.auth.two_factor import second_factor_method, decrypt, check_code
+from backend.services.auth.two_factor import second_factor_method, decrypt, check_code, hash_recovery_code
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -45,6 +45,16 @@ async def _load_login_challenge(login_challenge: str | None, db: Session) -> tup
         raise HTTPException(410, "Login expired. Sign in again.")
 
     return user, fail_key, remember
+
+
+async def _finish_login(login_challenge: str, fail_key: str, user: User, request: Request, response: Response, db: Session, remember: bool) -> None:
+    await redis_client.delete_login_challenge(login_challenge)
+    await redis_client.delete(fail_key)
+    await redis_client.delete(RedisClient.email_key(user.email.lower()))
+    await redis_client.delete(RedisClient.ip_key(client_ip(request)))
+
+    response.delete_cookie("login_challenge", path="/auth/login/2fa")
+    start_session(db, response, user, remember=remember)
 
 
 @router.post("/login")
@@ -136,10 +146,30 @@ async def auth_2fa(body: CodeIn, request: Request, response: Response, login_cha
         # Later email code verification
         raise HTTPException(501, "Email codes are not available yet")
 
-    await redis_client.delete_login_challenge(login_challenge)
-    await redis_client.delete(fail_key)
-    await redis_client.delete(RedisClient.email_key(user.email.lower()))
-    await redis_client.delete(RedisClient.ip_key(client_ip(request)))
+    await _finish_login(login_challenge, fail_key, user, request, response, db, remember)
 
-    response.delete_cookie("login_challenge", path="/auth/login/2fa")
-    start_session(db, response, user, remember=remember)
+
+@router.post("/login/2fa/recovery", status_code=204)
+async def auth_2fa_recovery(body: CodeIn, request: Request, response: Response, login_challenge: str | None = Cookie(default=None), db: Session = Depends(get_db)):
+    user, fail_key, remember = await _load_login_challenge(login_challenge, db)
+
+    if not user.totp_enabled:
+        raise HTTPException(400, "Recovery codes only work with an authenticator")
+
+    print("recovery debug", repr(body.code), hash_recovery_code(body.code), user.id, flush=True)
+    used = db.execute(
+        update(RecoveryCode)
+        .where(
+            RecoveryCode.user_id == user.id,
+            RecoveryCode.code_hash == hash_recovery_code(body.code),
+            RecoveryCode.used_at.is_(None),
+        )
+        .values(used_at=datetime.now(timezone.utc))
+        .returning(RecoveryCode.id)
+    ).scalar_one_or_none()
+
+    if used is None:
+        db.rollback()
+        raise HTTPException(400, "Invalid recovery code")
+
+    await _finish_login(login_challenge, fail_key, user, request, response, db, remember)

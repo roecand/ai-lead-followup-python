@@ -29,7 +29,8 @@ const RECOVERY_PATH = "/auth/login/2fa/recovery";
 
 const CODE_LENGTH = 6;
 // Recovery codes look like "a1b2c3-d4e5f6", 12 characters without the dash.
-const RECOVERY_LENGTH = 12;
+const RECOVERY_HALF = 10;
+const RECOVERY_LENGTH = RECOVERY_HALF * 2;
 
 export type LoginCodeMethod = "totp" | "email";
 
@@ -184,9 +185,8 @@ export default function LoginCodePage() {
                 autoCapitalize="none"
                 spellCheck={false}
                 maxLength={RECOVERY_LENGTH + 4 /* room for a pasted dash or spaces */}
-                placeholder="xxxxxx-xxxxxx"
-                value={code.length > 6 ? `${code.slice(0, 6)}-${code.slice(6)}` : code}
-                disabled={busy}
+                placeholder="xxxxxxxxxx-xxxxxxxxxx"
+                value={code.length > RECOVERY_HALF ? `${code.slice(0, RECOVERY_HALF)}-${code.slice(RECOVERY_HALF)}` : code}                disabled={busy}
                 onChange={(e) => handleChange(e.target.value)}
               />
             ) : (
