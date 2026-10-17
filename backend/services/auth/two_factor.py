@@ -20,7 +20,7 @@ def new_secret() -> str:
 
 
 def otpauth_uri(secret: str, email: str) -> str:
-    return pyotp.TOTP(secret).provisioning_uri(email=email, issuer_name=ISSUER)
+    return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name=ISSUER)
 
 
 def encrypt(text: str) -> str:

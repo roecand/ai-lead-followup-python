@@ -4,15 +4,16 @@ import { AnimatePresence, motion, useReducedMotion, type Variants } from "motion
 import { refreshToken } from "../../../shared/api/client";
 import { AUTH_CSS } from "../authStyles";
 import { AuthBackdrop, AuthTop } from "./AuthChrome";
-import { AUTH_PATHS, SECURE_ACCOUNT_PATH, SIGNED_IN_AUTH_PATHS, normalizePath } from "../authPaths";
+import { AUTH_PATHS, LOGIN_CODE_PATH, SECURE_ACCOUNT_PATH, SIGNED_IN_AUTH_PATHS, normalizePath } from "../authPaths";
 import { SLIDE_MS, SlideDirection } from "../slide";
 import LoginPage from "../pages/LoginPage";
+import LoginCodePage from "../pages/LoginCodePage";
 import SignupPage from "../pages/SignupPage";
 import VerifyPage from "../pages/VerifyPage";
 import SecureAccountPage from "../pages/SecureAccountPage";
 
 /**
- * Holds the sign-in, sign-up, verify and secure-account pages as one
+ * Holds the sign-in, sign-in code, sign-up, verify and secure-account pages as one
  * sliding scene.
  *
  * The sky and the top bar stay still. Only the page content slides.
@@ -110,6 +111,7 @@ export default function AuthShell() {
               <SlideDirection.Provider value={direction}>
                 <Routes location={location}>
                   <Route path="/" element={<LoginPage />} />
+                  <Route path={LOGIN_CODE_PATH} element={<LoginCodePage />} />
                   <Route path="/signup" element={<SignupPage />} />
                   <Route path="/verify" element={<VerifyPage />} />
                   <Route path={SECURE_ACCOUNT_PATH} element={<SecureAccountPage />} />

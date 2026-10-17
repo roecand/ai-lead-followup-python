@@ -1,6 +1,7 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { API_BASE } from "../../../shared/api/client";
+import { LOGIN_CODE_PATH } from "../authPaths";
 
 /* ---------------------------------------------------------------------------
    Sample thread shown beside the form. It uses the fictional demo business
@@ -98,6 +99,14 @@ export default function LoginPage({
         }
         if (!response.ok) {
           throw new Error("That email and password don't match an account.");
+        }
+
+        // The password was right. The backend set the login challenge as a
+        // cookie and tells us which kind of code to ask for.
+        const data = await response.json().catch(() => null);
+        if (data?.method) {
+          navigate(LOGIN_CODE_PATH, { state: { method: data.method } });
+          return;
         }
       }
       navigate("/dashboard", { replace: true });

@@ -1,3 +1,5 @@
+import json
+
 import redis.asyncio as redis
 from redis.exceptions import RedisError
 
@@ -128,12 +130,14 @@ class RedisClient:
         """True the first time a 30 second step is used, False if it was already used. Prevents using the same code twice"""
         return bool(await self.redis_client.set(f"totp_used_{user_id}_{step}", "1", nx=True, ex=self.TOTP_USED_TTL_SECONDS))
 
+    # ---- Totp login varification use
+    async def save_login_challenge(self, challenge: str, user_id: str, remember: bool) -> None:
+        value = json.dumps({"user_id": user_id, "remember": remember})
+        await self.redis_client.set(self._challenge_key(challenge), value, ex=self.LOGIN_CHALLENGE_TTL_SECONDS)
 
-    async def save_login_challenge(self, challenge: str, user_id: str) -> None:
-        await self.redis_client.set(self._challenge_key(challenge), user_id, ex=self.LOGIN_CHALLENGE_TTL_SECONDS)
-
-    async def get_login_challenge(self, challenge: str) -> str | None:
-        return await self.redis_client.get(self._challenge_key(challenge))
+    async def get_login_challenge(self, challenge: str) -> dict | None:
+        value = await self.redis_client.get(self._challenge_key(challenge))
+        return json.loads(value) if value else None
 
     async def delete_login_challenge(self, challenge: str) -> None:
         await self.redis_client.delete(self._challenge_key(challenge))

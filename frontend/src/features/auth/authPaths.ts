@@ -5,7 +5,10 @@
  */
 export const SECURE_ACCOUNT_PATH = "/secure";
 
-export const AUTH_PATHS = ["/", "/signup", "/verify", SECURE_ACCOUNT_PATH];
+/** The code step after the password on sign-in. */
+export const LOGIN_CODE_PATH = "/login/code";
+
+export const AUTH_PATHS = ["/", LOGIN_CODE_PATH, "/signup", "/verify", SECURE_ACCOUNT_PATH];
 
 /** Pages in the scene that need a signed-in session (the rest need a signed-out one). */
 export const SIGNED_IN_AUTH_PATHS = [SECURE_ACCOUNT_PATH];

@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
-from starlette import status
 
 from backend.database import RecoveryCode, User
 from backend.deps import get_current_user, get_db, redis_client

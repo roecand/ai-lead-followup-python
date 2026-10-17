@@ -1,6 +1,6 @@
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
 from fastapi.responses import Response
@@ -24,6 +24,29 @@ MAX_FAILS_PER_IP = 20
 LOGIN_LOCKOUT_SECONDS = 15 * 60
 
 
+async def _load_login_challenge(login_challenge: str | None, db: Session) -> tuple[User, str, bool]:
+    if not login_challenge:
+        raise HTTPException(410, "Login expired. Sign in again.")
+
+    data = await redis_client.get_login_challenge(login_challenge)
+    if not data:
+        raise HTTPException(410, "Login expired. Sign in again.")
+
+    user_id = data["user_id"]
+    remember = data["remember"]
+
+    fail_key = f"login_2fa_fail_{user_id}"
+    if await redis_client.hit(fail_key, redis_client.TOTP_LIMIT, redis_client.TOTP_LOCKOUT): # Use same values as totp
+        raise HTTPException(429, "Too many login attempts")
+
+    user_id = uuid.UUID(user_id)
+    user = db.scalar(select(User).where(User.id == user_id))
+    if not user:
+        raise HTTPException(410, "Login expired. Sign in again.")
+
+    return user, fail_key, remember
+
+
 @router.post("/login")
 async def auth_login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)) -> JSONResponse:
     lower_case_email = payload.email.strip().lower()
@@ -43,7 +66,7 @@ async def auth_login(payload: LoginRequest, request: Request, db: Session = Depe
 
     method = second_factor_method(user)
     challenge = secrets.token_urlsafe(32)
-    await redis_client.save_login_challenge(challenge, str(user.id))
+    await redis_client.save_login_challenge(challenge, str(user.id), payload.remember)
 
     # if method == "email":
     #     await issue_code(...)  # sends the emailed code, you build this with the gateway
@@ -100,34 +123,18 @@ async def auth_logout(db: Session = Depends(get_db), refresh_token: str | None =
 
 @router.post("/login/2fa", status_code=204)
 async def auth_2fa(body: CodeIn, request: Request, response: Response, login_challenge: str | None = Cookie(default=None), db: Session = Depends(get_db)):
-    if not login_challenge:
-        raise HTTPException(410, "Login expired. Sign in again.")
+    user, fail_key, remember = await _load_login_challenge(login_challenge, db)
+    user_id = user.id
 
-    user_id = await redis_client.get_login_challenge(login_challenge)
+    method = second_factor_method(user)
 
-    if not user_id:
-        raise HTTPException(410, "Login expired. Sign in again.")
-
-    fail_key = f"login_2fa_fail_{user_id}"
-    if await redis_client.hit(fail_key, redis_client.TOTP_LIMIT, redis_client.TOTP_LOCKOUT): # Use same values as totp
-        raise HTTPException(429, "Too many login attempts")
-
-    user_id = uuid.UUID(user_id)
-    user = db.scalar(select(User).where(User.id == user_id))
-    if not user:
-        raise HTTPException(410, "Login expired. Sign in again.")
-
-    if user.totp_enabled:
+    if method == "totp":
         secret = decrypt(user.totp_secret_enc)
-
         if not await check_code(user_id, secret, body.code):
             raise HTTPException(400, "Invalid code")
     else:
-        # Later email code varification
+        # Later email code verification
         raise HTTPException(501, "Email codes are not available yet")
-
-    email_key = RedisClient.email_key(user.email.lower())
-    ip_key = RedisClient.ip_key(client_ip(request))
 
     await redis_client.delete_login_challenge(login_challenge)
     await redis_client.delete(fail_key)
@@ -135,4 +142,4 @@ async def auth_2fa(body: CodeIn, request: Request, response: Response, login_cha
     await redis_client.delete(RedisClient.ip_key(client_ip(request)))
 
     response.delete_cookie("login_challenge", path="/auth/login/2fa")
-    start_session(db, response, user)
+    start_session(db, response, user, remember=remember)
