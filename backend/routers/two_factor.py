@@ -6,12 +6,9 @@ from starlette import status
 from backend.database import RecoveryCode, User
 from backend.deps import get_current_user, get_db, redis_client
 from backend.schemas.auth import CodeIn
-from backend.services.auth.two_factor import check_code, encrypt, make_recovery_codes, new_secret, otpauth_uri
+from backend.services.auth.two_factor import check_code, encrypt, make_recovery_codes, new_secret, otpauth_uri, second_factor_method
 
 router = APIRouter(prefix="/auth/2fa", tags=["two-factor"])
-
-TOTP_LIMIT = 5
-TOTP_LOCKOUT = 10 * 60
 
 @router.post("/totp/start")
 async def totp_start(user: User = Depends(get_current_user)):
@@ -25,10 +22,10 @@ async def totp_start(user: User = Depends(get_current_user)):
 
 @router.post("/totp/confirm")
 async def totp_confirm(body: CodeIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if await redis_client.hit(f"totp_confirm_{user.id}", TOTP_LIMIT, TOTP_LOCKOUT):
+    if await redis_client.hit(f"totp_confirm_{user.id}", redis_client.TOTP_LIMIT, redis_client.TOTP_LOCKOUT):
         raise HTTPException(429, "Too many tries. Wait a few minutes and start again.")
 
-    secret = await redis_client.get_totp_pending(f"user.id")
+    secret = await redis_client.get_totp_pending(user.id)
     if not secret:
         raise HTTPException(410, "Setup expired. Start again.")
     if not await check_code(user.id, secret, body.code):
@@ -44,3 +41,8 @@ async def totp_confirm(body: CodeIn, user: User = Depends(get_current_user), db:
 
     await redis_client.delete_totp_pending(user.id)
     return {"recovery_codes": codes}
+
+
+@router.get("")
+async def two_factor_status(user: User = Depends(get_current_user)):
+    return {"method": second_factor_method(user)}

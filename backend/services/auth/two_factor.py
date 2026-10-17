@@ -8,6 +8,7 @@ import pyotp
 from cryptography.fernet import Fernet
 
 from backend.core.config import get_settings
+from backend.database import User
 from backend.deps import redis_client
 
 ISSUER = "Meridiem"
@@ -26,7 +27,11 @@ def encrypt(text: str) -> str:
     return _fernet.encrypt(text.encode()).decode()
 
 
-async def check_code(user_id:  uuid.UUID, secret: str, code: str) -> bool:
+def decrypt(text: str) -> str:
+    return _fernet.decrypt(text.encode()).decode()
+
+
+async def check_code(user_id: uuid.UUID, secret: str, code: str) -> bool:
     code = code.strip().replace(" ", "")
     if not(code.isdigit() and len(code) == 6):
         return False
@@ -48,3 +53,7 @@ def hash_recovery_code(code: str) -> str:
 def make_recovery_codes(count: int = 10) -> tuple[list[str], list[str]]:
     codes = [f"{secrets.token_hex(3)}-{secrets.token_hex(3)}" for _ in range(count)]
     return codes, [hash_recovery_code(c) for c in codes]
+
+
+def second_factor_method(user: User) -> str:
+    return "totp" if user.totp_enabled else "email"

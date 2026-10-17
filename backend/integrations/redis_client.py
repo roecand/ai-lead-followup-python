@@ -12,6 +12,10 @@ class RedisClient:
 
     TOTP_PENDING_TTL_SECONDS = 10 * 60
     TOTP_USED_TTL_SECONDS = 2 * 60
+    TOTP_LIMIT = 5
+    TOTP_LOCKOUT = 10 * 60
+
+    LOGIN_CHALLENGE_TTL_SECONDS = 5 * 60
 
     def __init__(self):
         self.redis_client = redis.from_url(get_settings().redis_url, decode_responses=True)
@@ -32,6 +36,18 @@ class RedisClient:
     @staticmethod
     def _cooldown_key(email: str) -> str:
         return f"code_cooldown_{email.lower()}"
+
+    @staticmethod
+    def _challenge_key(challenge: str) -> str:
+        return f"login_challenge_{challenge}"
+
+    @staticmethod
+    def email_key(email: str) -> str:
+        return f"login_fail:email:{email}"
+
+    @staticmethod
+    def ip_key(ip: str) -> str:
+        return f"login_fail:ip:{ip}"
 
 
     async def hit(self, key: str, limit: int, lockout_time: int) -> bool:
@@ -108,9 +124,16 @@ class RedisClient:
     async def delete_totp_pending(self, user_id: str) -> None:
         await self.redis_client.delete(f"totp_pending_{user_id}")
 
-    async def claim_totp_step(self, user_id, step: int) -> bool:
+    async def claim_totp_step(self, user_id: str, step: int) -> bool:
         """True the first time a 30 second step is used, False if it was already used. Prevents using the same code twice"""
-        return bool(
-            await self.redis_client.set(f"totp_used_{user_id}_{step}", "1", nx=True, ex=self.TOTP_USED_TTL_SECONDS))
+        return bool(await self.redis_client.set(f"totp_used_{user_id}_{step}", "1", nx=True, ex=self.TOTP_USED_TTL_SECONDS))
 
 
+    async def save_login_challenge(self, challenge: str, user_id: str) -> None:
+        await self.redis_client.set(self._challenge_key(challenge), user_id, ex=self.LOGIN_CHALLENGE_TTL_SECONDS)
+
+    async def get_login_challenge(self, challenge: str) -> str | None:
+        return await self.redis_client.get(self._challenge_key(challenge))
+
+    async def delete_login_challenge(self, challenge: str) -> None:
+        await self.redis_client.delete(self._challenge_key(challenge))
