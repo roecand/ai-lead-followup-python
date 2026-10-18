@@ -16,7 +16,7 @@ from backend.core.security import create_refresh_token, pwd_context
 from backend.schemas.auth import CodeIn
 from backend.services.auth.sessions import set_auth_cookies, unauthorized, clear_auth_cookies, start_session
 from backend.services.auth.two_factor import second_factor_method, decrypt, check_code, hash_recovery_code
-from backend.services.auth.verification import issue_login_code, check_login_code
+from backend.services.auth.verification import issue_login_code, check_login_code, check_recovery_code
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -25,7 +25,7 @@ MAX_FAILS_PER_IP = 20
 LOGIN_LOCKOUT_SECONDS = 15 * 60
 
 
-async def _load_login_challenge(login_challenge: str | None, db: Session) -> tuple[User, str, bool]:
+async def _load_login_challenge(login_challenge: str | None, db: Session, count_attempt: bool = True) -> tuple[User, str, bool]:
     if not login_challenge:
         raise HTTPException(410, "Login expired. Sign in again.")
 
@@ -37,7 +37,7 @@ async def _load_login_challenge(login_challenge: str | None, db: Session) -> tup
     remember = data["remember"]
 
     fail_key = f"login_2fa_fail_{user_id}"
-    if await redis_client.hit(fail_key, redis_client.TOTP_LIMIT, redis_client.TOTP_LOCKOUT): # Use same values as totp
+    if count_attempt and await redis_client.hit(fail_key, redis_client.TOTP_LIMIT, redis_client.TOTP_LOCKOUT): # Use same values as totp
         raise HTTPException(429, "Too many login attempts")
 
     user_id = uuid.UUID(user_id)
@@ -158,20 +158,31 @@ async def auth_2fa_recovery(body: CodeIn, request: Request, response: Response, 
     if not user.totp_enabled:
         raise HTTPException(400, "Recovery codes only work with an authenticator")
 
-    print("recovery debug", repr(body.code), hash_recovery_code(body.code), user.id, flush=True)
-    used = db.execute(
-        update(RecoveryCode)
-        .where(
-            RecoveryCode.user_id == user.id,
-            RecoveryCode.code_hash == hash_recovery_code(body.code),
-            RecoveryCode.used_at.is_(None),
-        )
-        .values(used_at=datetime.now(timezone.utc))
-        .returning(RecoveryCode.id)
-    ).scalar_one_or_none()
-
-    if used is None:
-        db.rollback()
-        raise HTTPException(400, "Invalid recovery code")
+    await check_recovery_code(user, body.code, db)
 
     await _finish_login(login_challenge, fail_key, user, request, response, db, remember)
+
+
+@router.post("/login/2fa/resend", status_code=204)
+async def auth_2fa_resend(response: Response, login_challenge: str | None = Cookie(default=None), db: Session = Depends(get_db)):
+    user, _, remember = await _load_login_challenge(login_challenge, db, count_attempt=False)
+
+    if second_factor_method(user) != "email":
+        raise HTTPException(400, "This account uses an authenticator app.")
+
+    if await redis_client.cooldown_active(user.email):
+        raise HTTPException(429, "Wait 30 seconds before asking for another code.")
+
+    await issue_login_code(user)
+
+    # Give the new code a full challenge window, or the sign-in could expire before it does
+    await redis_client.save_login_challenge(login_challenge, str(user.id), remember)
+    response.set_cookie(
+        key="login_challenge",
+        value=login_challenge,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=redis_client.LOGIN_CHALLENGE_TTL_SECONDS,
+        path="/auth/login/2fa",
+    )

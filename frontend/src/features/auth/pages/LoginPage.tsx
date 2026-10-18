@@ -97,6 +97,10 @@ export default function LoginPage({
         if (response.status === 429) {
           throw new Error("Too many sign-in attempts. Try again in a few minutes.");
         }
+        // The password was right, but the email with the sign-in code couldn't be sent.
+        if (response.status === 502) {
+          throw new Error("We couldn't send your sign-in code. Try again in a moment.");
+        }
         if (!response.ok) {
           throw new Error("That email and password don't match an account.");
         }

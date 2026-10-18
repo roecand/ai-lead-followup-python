@@ -7,6 +7,7 @@ from backend.deps import get_current_user, get_db, redis_client
 from backend.schemas.auth import CodeIn
 from backend.services.auth.two_factor import check_code, encrypt, make_recovery_codes, new_secret, otpauth_uri, \
     second_factor_method, decrypt
+from backend.services.auth.verification import check_recovery_code
 
 router = APIRouter(prefix="/auth/2fa", tags=["two-factor"])
 
@@ -55,7 +56,14 @@ async def two_factor_disable(body: CodeIn, user: User = Depends(get_current_user
     if not user.totp_enabled:
         raise HTTPException(409, "Authenticator is already off.")
 
-    await _check_totp(user, decrypt(user.totp_secret_enc), body.code)
+    code = body.code.strip().replace(" ", "").replace("-", "")
+
+    if len(code) == 6:
+        await _check_totp(user, decrypt(user.totp_secret_enc), code)
+    elif len(code) == 20:
+        await check_recovery_code(user, code, db)
+    else:
+        raise HTTPException(409, "Invalid code.")
 
     db.execute(delete(RecoveryCode).where(RecoveryCode.user_id == user.id)) # Clear all codes for user
     user.totp_secret_enc = None

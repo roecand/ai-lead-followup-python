@@ -23,14 +23,22 @@ import { API_BASE } from "../../../shared/api/client";
  *     410  challenge missing or expired, sign in again
  *     429  too many tries
  *     501  this kind of code isn't available yet
+ *
+ *   POST RESEND_PATH    (no body) -> 204, a new email code is on its way
+ *     410  challenge missing or expired, sign in again
+ *     429  cooldown or hourly limit, the response detail says which
+ *     502  the email couldn't be sent
+ *   Only email users see the resend button.
  */
 const CODE_PATH = "/auth/login/2fa";
 const RECOVERY_PATH = "/auth/login/2fa/recovery";
+const RESEND_PATH = "/auth/login/2fa/resend";
 
 const CODE_LENGTH = 6;
-// Recovery codes look like "a1b2c3-d4e5f6", 12 characters without the dash.
+// Recovery codes look like "a1b2c3d4e5-f6a7b8c9d0", 20 characters without the dash.
 const RECOVERY_HALF = 10;
 const RECOVERY_LENGTH = RECOVERY_HALF * 2;
+const RESEND_COOLDOWN_S = 30;
 
 export type LoginCodeMethod = "totp" | "email";
 
@@ -60,6 +68,11 @@ export default function LoginCodePage() {
   const [busy, setBusy] = useState(false);
   // The backend dropped the challenge (410), so the password step has to run again.
   const [expired, setExpired] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  // A code was just emailed when they arrived, so the cooldown starts right away.
+  const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_S);
+  const [resending, setResending] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -67,6 +80,12 @@ export default function LoginCodePage() {
   useEffect(() => {
     if (!busy) inputRef.current?.focus({ preventScroll: true });
   }, [busy, recovery]);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = window.setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => window.clearTimeout(id);
+  }, [cooldown]);
 
   const ready = recovery ? code.length === RECOVERY_LENGTH : code.length === CODE_LENGTH;
 
@@ -80,10 +99,49 @@ export default function LoginCodePage() {
     if (error) setError("");
   }
 
+  async function resend() {
+    if (cooldown > 0 || resending || busy) return;
+    setResending(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(`${API_BASE}${RESEND_PATH}`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (response.ok) {
+        setNotice("A new code is on its way. Earlier codes no longer work.");
+        setCode("");
+        // Only a real send starts the wait, to match the backend.
+        setCooldown(RESEND_COOLDOWN_S);
+        inputRef.current?.focus({ preventScroll: true });
+      } else if (response.status === 410) {
+        setExpired(true);
+      } else if (response.status === 429) {
+        // Two reasons share this status (cooldown and the hourly limit), so show the server's own wording.
+        const data = await response.json().catch(() => null);
+        setError(typeof data?.detail === "string"
+          ? data.detail
+          : "You asked for a code a moment ago. Give it a minute.");
+        setCooldown(RESEND_COOLDOWN_S);
+      } else if (response.status === 404 || response.status === 501) {
+        setError("Resending isn't available yet. Go back and sign in again for a new code.");
+      } else {
+        // The send failed (502 or similar). No wait, they can try again right away.
+        setError("Couldn't send a new code. Try again.");
+      }
+    } catch {
+      setError("Couldn't reach the server. Check your connection and try again.");
+    } finally {
+      setResending(false);
+    }
+  }
+
   function switchMode() {
     setRecovery((r) => !r);
     setCode("");
     setError("");
+    setNotice("");
   }
 
   async function submit(e: FormEvent) {
@@ -96,6 +154,7 @@ export default function LoginCodePage() {
 
     setBusy(true);
     setError("");
+    setNotice("");
     try {
       const response = await fetch(`${API_BASE}${recovery ? RECOVERY_PATH : CODE_PATH}`, {
         method: "POST",
@@ -209,7 +268,11 @@ export default function LoginCodePage() {
           </div>
 
           <div className="lf-error-slot" role="alert" aria-live="polite">
-            {error ? <div className="lf-error">{error}</div> : null}
+            {error ? (
+              <div className="lf-error">{error}</div>
+            ) : notice ? (
+              <div className="lf-notice">{notice}</div>
+            ) : null}
           </div>
 
           <button type="submit" className="lf-submit" disabled={busy || !ready}>
@@ -223,7 +286,19 @@ export default function LoginCodePage() {
                 {recovery ? "use an app code" : "use a recovery code"}
               </button>
             </div>
-          ) : null}
+          ) : (
+            <div className="lf-resend">
+              <span>Didn't get it? Check spam, or</span>{" "}
+              <button
+                type="button"
+                className="lf-reveal"
+                onClick={resend}
+                disabled={busy || resending || cooldown > 0}
+              >
+                {resending ? "sending" : cooldown > 0 ? `resend in ${cooldown}s` : "send a new code"}
+              </button>
+            </div>
+          )}
 
           <p className="lf-foot">
             Not you?{" "}

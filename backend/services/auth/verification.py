@@ -1,14 +1,19 @@
 from fastapi import HTTPException
+from sqlalchemy import update, UUID
+from sqlalchemy.orm import Session
 
 import secrets
 import hmac
 import hashlib
 
-from backend.database import User
+from datetime import datetime, timezone
+
+from backend.database import User, RecoveryCode
 from backend.deps import redis_client
 
 from backend.core.config import get_settings
 from backend.integrations.mailer import send_code_email
+from backend.services.auth.two_factor import hash_recovery_code
 
 MAX_CODES_PER_HOUR = 8
 CODE_WINDOW_SECONDS = 60 * 60
@@ -84,7 +89,7 @@ async def issue_login_code(user: User) -> None:
     try:
         await send_code_email(user.email, code)
     except Exception:
-        await redis_client.delete_code(user_id)
+        await redis_client.delete_login_code(user_id)
         raise HTTPException(502, "Couldn't send the email. Try again.")
 
 
@@ -104,3 +109,22 @@ async def check_login_code(user: User, submitted: str) -> bool:
     # One use only
     await redis_client.delete_login_code(user_id)
     return True
+
+async def check_recovery_code(user: User, code: str, db: Session) -> None:
+    if await redis_client.hit(f"recovery_try_{user.id}", redis_client.TOTP_LIMIT, redis_client.TOTP_LOCKOUT):
+        raise HTTPException(429, "Too many tries. Wait a few minutes and try again.")
+
+    used = db.execute(
+        update(RecoveryCode)
+        .where(
+            RecoveryCode.user_id == user.id,
+            RecoveryCode.code_hash == hash_recovery_code(code),
+            RecoveryCode.used_at.is_(None),
+        )
+        .values(used_at=datetime.now(timezone.utc))
+        .returning(RecoveryCode.id)
+    ).scalar_one_or_none()
+
+    if used is None:
+        db.rollback()
+        raise HTTPException(400, "Invalid recovery code")
