@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from sqlalchemy import update, UUID
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 import secrets
@@ -70,14 +70,6 @@ async def check_verification_code(email: str, code: str) -> dict:
     return pending
 
 
-def _login_code_key(user_id) -> str:
-    return f"login_code_{user_id}"
-
-
-def _login_tries_key(user_id) -> str:
-    return f"login_code_tries_{user_id}"
-
-
 async def issue_login_code(user: User) -> None:
     user_id = str(user.id)
     if await redis_client.hit(f"login_code_sent_{user_id}", redis_client.MAX_CODES_PER_HOUR, redis_client.CODE_LOCKOUT_SECONDS):
@@ -91,6 +83,7 @@ async def issue_login_code(user: User) -> None:
     except Exception:
         await redis_client.delete_login_code(user_id)
         raise HTTPException(502, "Couldn't send the email. Try again.")
+    await redis_client.start_cooldown(user.email)
 
 
 async def check_login_code(user: User, submitted: str) -> bool:

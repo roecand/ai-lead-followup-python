@@ -63,7 +63,7 @@ async def two_factor_disable(body: CodeIn, user: User = Depends(get_current_user
     elif len(code) == 20:
         await check_recovery_code(user, code, db)
     else:
-        raise HTTPException(409, "Invalid code.")
+        raise HTTPException(400, "Invalid code.")
 
     db.execute(delete(RecoveryCode).where(RecoveryCode.user_id == user.id)) # Clear all codes for user
     user.totp_secret_enc = None

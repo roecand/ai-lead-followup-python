@@ -4,18 +4,18 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
 from fastapi.responses import Response
-from sqlalchemy import select, delete, update
+from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse
 
-from backend.database import RefreshToken, User, RecoveryCode
+from backend.database import RefreshToken, User
 from backend.deps import client_ip, get_db, redis_client
 from backend.integrations.redis_client import RedisClient
 from backend.schemas import LoginRequest
 from backend.core.security import create_refresh_token, pwd_context
 from backend.schemas.auth import CodeIn
 from backend.services.auth.sessions import set_auth_cookies, unauthorized, clear_auth_cookies, start_session
-from backend.services.auth.two_factor import second_factor_method, decrypt, check_code, hash_recovery_code
+from backend.services.auth.two_factor import second_factor_method, decrypt, check_code
 from backend.services.auth.verification import issue_login_code, check_login_code, check_recovery_code
 
 router = APIRouter(prefix="/auth", tags=["auth"])
