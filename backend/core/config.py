@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:"
     verification_secret: str
     twofa_encryption_key: str
+    email_provider: str = "console"
+    resend_api_key: str | None = None
+    email_from: str
 
 
 @lru_cache

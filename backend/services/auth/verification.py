@@ -4,10 +4,11 @@ import secrets
 import hmac
 import hashlib
 
+from backend.database import User
 from backend.deps import redis_client
 
 from backend.core.config import get_settings
-
+from backend.integrations.mailer import send_code_email
 
 MAX_CODES_PER_HOUR = 8
 CODE_WINDOW_SECONDS = 60 * 60
@@ -33,8 +34,14 @@ async def issue_code(email: str) -> None:
 
     code = generate_code()
     await redis_client.save_code(email, hash_code(email, code))
+
+    try:
+        await send_code_email(email, code)
+    except Exception:
+        await redis_client.delete_code(email)
+        raise HTTPException(502, "Couldn't send the email. Try again.")
+
     await redis_client.start_cooldown(email)
-    print(code)  # the email gateway call replaces this later
 
 
 async def check_verification_code(email: str, code: str) -> dict:
@@ -56,3 +63,44 @@ async def check_verification_code(email: str, code: str) -> dict:
         raise HTTPException(400, "Invalid code")
 
     return pending
+
+
+def _login_code_key(user_id) -> str:
+    return f"login_code_{user_id}"
+
+
+def _login_tries_key(user_id) -> str:
+    return f"login_code_tries_{user_id}"
+
+
+async def issue_login_code(user: User) -> None:
+    user_id = str(user.id)
+    if await redis_client.hit(f"login_code_sent_{user_id}", redis_client.MAX_CODES_PER_HOUR, redis_client.CODE_LOCKOUT_SECONDS):
+        raise HTTPException(429, "Too many codes requested. Try again later.")
+
+    code = generate_code()
+    await redis_client.save_login_code(user_id, hash_code(user.email, code))
+
+    try:
+        await send_code_email(user.email, code)
+    except Exception:
+        await redis_client.delete_code(user_id)
+        raise HTTPException(502, "Couldn't send the email. Try again.")
+
+
+async def check_login_code(user: User, submitted: str) -> bool:
+    user_id = str(user.id)
+    stored = await redis_client.get_login_code(user_id)
+    if not stored:
+        return False
+
+    if await redis_client.too_many_login_code_attempts(user_id):
+        await redis_client.delete_login_code(user_id)
+        raise HTTPException(429, "Too many attempts. Sign in again for a new code.")
+
+    if not code_matches(user.email, submitted, stored):
+        return False
+
+    # One use only
+    await redis_client.delete_login_code(user_id)
+    return True

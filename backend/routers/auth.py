@@ -16,6 +16,7 @@ from backend.core.security import create_refresh_token, pwd_context
 from backend.schemas.auth import CodeIn
 from backend.services.auth.sessions import set_auth_cookies, unauthorized, clear_auth_cookies, start_session
 from backend.services.auth.two_factor import second_factor_method, decrypt, check_code, hash_recovery_code
+from backend.services.auth.verification import issue_login_code, check_login_code
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -78,8 +79,9 @@ async def auth_login(payload: LoginRequest, request: Request, db: Session = Depe
     challenge = secrets.token_urlsafe(32)
     await redis_client.save_login_challenge(challenge, str(user.id), payload.remember)
 
-    # if method == "email":
-    #     await issue_code(...)  # sends the emailed code, you build this with the gateway
+    if method == "email":
+        await issue_login_code(user)
+
     json_response = JSONResponse({"method": method})
     json_response.set_cookie(
         key="login_challenge",
@@ -143,8 +145,8 @@ async def auth_2fa(body: CodeIn, request: Request, response: Response, login_cha
         if not await check_code(user_id, secret, body.code):
             raise HTTPException(400, "Invalid code")
     else:
-        # Later email code verification
-        raise HTTPException(501, "Email codes are not available yet")
+        if not await check_login_code(user, body.code):
+            raise HTTPException(400, "Invalid code")
 
     await _finish_login(login_challenge, fail_key, user, request, response, db, remember)
 

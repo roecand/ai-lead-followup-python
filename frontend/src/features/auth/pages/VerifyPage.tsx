@@ -21,6 +21,7 @@ import { SECURE_ACCOUNT_PATH } from "../authPaths";
  *                                         410 sign-up session expired, start over
  *                                         429 cooldown or hourly limit, the
  *                                             response detail says which
+ *                                         502 the email couldn't be sent
  */
 const VERIFY_PATH = "/auth/verify-email";
 const RESEND_PATH = "/auth/resend-code";
@@ -133,19 +134,23 @@ export default function VerifyPage() {
         // Two reasons share this status (cooldown and the hourly limit), so show the server's own wording.
         const data = await response.json().catch(() => null);
         setError(data?.detail ?? "You asked for a code a moment ago. Give it a minute.");
+        setCooldown(RESEND_COOLDOWN_S);
       } else if (!response.ok) {
+        // The send failed (502 or similar). The backend didn't start its
+        // cooldown, so no wait here either. They can try again right away.
         setError("Couldn't send a new code. Try again.");
       } else {
         setNotice("A new code is on its way. Earlier codes no longer work.");
         setCode("");
         submittedRef.current = "";
+        // Only a real send starts the wait, to match the backend.
+        setCooldown(RESEND_COOLDOWN_S);
         inputRef.current?.focus({ preventScroll: true });
       }
     } catch {
       setError("Couldn't reach the server. Check your connection and try again.");
     } finally {
       setResending(false);
-      setCooldown(RESEND_COOLDOWN_S);
     }
   }
 

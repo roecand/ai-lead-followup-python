@@ -217,5 +217,9 @@ async function signupError(response: Response): Promise<string> {
     return detail || "That join code didn't match a company. Check it with your company's admin.";
   }
   if (response.status === 422) return "Some of those details aren't valid. Check each field and try again.";
+  // The details were fine, but the verification email couldn't be sent.
+  if (response.status === 502) {
+    return detail || "We couldn't send your verification email. Try again in a moment.";
+  }
   return "Sign-up didn't complete. Try again.";
 }

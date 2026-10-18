@@ -19,6 +19,11 @@ class RedisClient:
 
     LOGIN_CHALLENGE_TTL_SECONDS = 5 * 60
 
+    LOGIN_CODE_TTL_SECONDS = 5 * 60
+    MAX_LOGIN_CODE_ATTEMPTS = 5
+    MAX_CODES_PER_HOUR = 8
+    CODE_LOCKOUT_SECONDS = 60 * 60
+
     def __init__(self):
         self.redis_client = redis.from_url(get_settings().redis_url, decode_responses=True)
 
@@ -42,6 +47,14 @@ class RedisClient:
     @staticmethod
     def _challenge_key(challenge: str) -> str:
         return f"login_challenge_{challenge}"
+
+    @staticmethod
+    def _login_code_key(user_id) -> str:
+        return f"login_code_{user_id}"
+
+    @staticmethod
+    def _login_code_attempts_key(user_id) -> str:
+        return f"login_code_attempts_{user_id}"
 
     @staticmethod
     def email_key(email: str) -> str:
@@ -141,3 +154,28 @@ class RedisClient:
 
     async def delete_login_challenge(self, challenge: str) -> None:
         await self.redis_client.delete(self._challenge_key(challenge))
+
+    # ---- Email login code 2fa
+    async def save_login_code(self, user_id: str, code_hash: str) -> None:
+        async with self.redis_client.pipeline() as pipe:
+            pipe.set(self._login_code_key(user_id), code_hash, ex=self.CODE_TTL_SECONDS) # noqa
+            pipe.delete(self._login_code_attempts_key(user_id)) # noqa
+            await pipe.execute()
+
+    async def get_login_code(self, user_id: str) -> str | None:
+        return await self.redis_client.get(self._login_code_key(user_id))
+
+    async def too_many_login_code_attempts(self, user_id : str) -> bool:
+        return await self.hit(
+            self._login_code_attempts_key(user_id),
+            limit=self.MAX_LOGIN_CODE_ATTEMPTS,
+            lockout_time=self.LOGIN_CODE_TTL_SECONDS,
+        )
+
+    async def delete_login_code(self, user_id: str) -> None:
+        await self.redis_client.delete(
+            self._login_code_attempts_key(user_id),
+            self._login_code_key(user_id),
+        )
+
+
