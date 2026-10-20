@@ -5,6 +5,7 @@ import { API_BASE } from "../../shared/api/client";
 import { THEME_CSS } from "../../shared/lib/theme";
 import { ThemeChoices } from "../../shared/components/AppearanceMenu";
 import SecurityPanel from "../security/SecurityPanel";
+import TeamPanel from "../team/TeamPanel";
 
 /**
  * Settings shell. The sections are real navigation, the panels are placeholders
@@ -46,7 +47,7 @@ const SECTIONS: Section[] = [
     id: "team",
     title: "Team",
     blurb: "Who can sign in and reply to leads.",
-    planned: ["Members and roles", "Join code with a rotate button"],
+    planned: [],
   },
   {
     id: "phone",
@@ -151,6 +152,8 @@ export function SettingsPage() {
                   <AppearancePanel/>
               ) : active.id === "security" ? (
                   <SecurityPanel/>
+              ) : active.id === "team" ? (
+                  <TeamPanel/>
               ) : (
                   <div className="st-planned">
                     <p className="st-planned-label">Coming to this page</p>
