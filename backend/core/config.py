@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     email_from: str
     cors_origins: list[str] = ["http://localhost:5173"]
+    enable_docs: bool = False
 
 
 @lru_cache
