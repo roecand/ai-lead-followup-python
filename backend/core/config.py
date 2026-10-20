@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     email_provider: str = "console"
     resend_api_key: str | None = None
     email_from: str
+    cors_origins: list[str] = ["http://localhost:5173"]
 
 
 @lru_cache

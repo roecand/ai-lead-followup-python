@@ -34,18 +34,18 @@ async def insert_user(payload: SignupRequest, db: Session = Depends(get_db)) -> 
     db.refresh(user)
 
 
-@router.post("/admin/create_company", status_code=201)
-async def create_company(payload: CreateCompany, db: Session = Depends(get_db)) -> dict:
-    existing = db.scalar(select(Company).where(Company.twilio_number == payload.twilio_number))
-    if existing:
-        raise HTTPException(409, "Company with this twilio number already exists")
-
-    company = Company(name=payload.name, twilio_number=payload.twilio_number, timezone=payload.timezone)
-    db.add(company)
-    db.commit()
-    db.refresh(company)
-
-    return {"id": str(company.id), "name": company.name, "join_code": company.join_code, "twilio_number": company.twilio_number}
+# @router.post("/admin/create_company", status_code=201)
+# async def create_company(payload: CreateCompany, db: Session = Depends(get_db)) -> dict:
+#     existing = db.scalar(select(Company).where(Company.twilio_number == payload.twilio_number))
+#     if existing:
+#         raise HTTPException(409, "Company with this twilio number already exists")
+#
+#     company = Company(name=payload.name, twilio_number=payload.twilio_number, timezone=payload.timezone)
+#     db.add(company)
+#     db.commit()
+#     db.refresh(company)
+#
+#     return {"id": str(company.id), "name": company.name, "join_code": company.join_code, "twilio_number": company.twilio_number}
 
 
 @router.post("/admin/run-followups")
