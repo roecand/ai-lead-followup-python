@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 
 from sqlalchemy import Boolean, DateTime, Enum as SqlEnum, ForeignKey, String, Text, UniqueConstraint, create_engine
@@ -7,7 +7,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
 
-from .config import get_settings
+from backend.core.config import get_settings
 
 import secrets
 
@@ -104,13 +104,13 @@ class Company(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(160))
-    join_code: Mapped[str] = mapped_column(String(20), unique=True, index=True, default=generate_join_code) # Temp-ish. Possibly have a rotating join code so if the code is leaked, the code can change
     twilio_number: Mapped[str] = mapped_column(String(32), unique=True)
     timezone: Mapped[str] = mapped_column(String(60), default="America/Los_Angeles")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     users: Mapped[list["User"]] = relationship(back_populates="company")
     leads: Mapped[list["Lead"]] = relationship(back_populates="company")
+    invites: Mapped[list["Invite"]] = relationship(back_populates="company")
 
 
 class User(Base):
@@ -120,10 +120,23 @@ class User(Base):
     company_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("companies.id"), index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(160))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     role: Mapped[str] = mapped_column(String(30), default="staff")  # owner / staff, room to grow
 
+    totp_secret_enc: Mapped[str | None] = mapped_column(String(255), default=None)
+    totp_enabled: Mapped[bool] = mapped_column(default=False)
+
     company: Mapped[Company] = relationship(back_populates="users")
+
+
+class RecoveryCode(Base):
+    __tablename__ = "recovery_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
 class RefreshToken(Base):
@@ -134,6 +147,24 @@ class RefreshToken(Base):
     token: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Invite(Base):
+    __tablename__ = "invites"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("companies.id"), index=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)  # save lowercase, not unique
+    join_code: Mapped[str] = mapped_column(String(20), unique=True, index=True, default=generate_join_code)
+    role: Mapped[str] = mapped_column(String(30), default="staff")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: utcnow() + timedelta(days=7))
+
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    used_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+
+    company: Mapped["Company"] = relationship(back_populates="invites")
+
 
 
 settings = get_settings()

@@ -4,10 +4,11 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import create_schema
-from .dependencies import sms_gateway
-from .services.followups import run_due_followups
-from .routers import admin, auth, dashboard, leads, webhooks, ws
+from backend.core.config import get_settings
+from backend.database import create_schema
+from backend.deps import sms_gateway
+from backend.services.followups import run_due_followups
+from backend.routers import admin, auth, dashboard, leads, webhooks, ws, two_factor, signup
 
 scheduler = AsyncIOScheduler()
 
@@ -21,16 +22,21 @@ async def lifespan(_: FastAPI):
     scheduler.shutdown(wait=False)
 
 
+settings = get_settings()
+
 app = FastAPI(
     title="AI Lead Follow-up Reference Build",
     version="0.1.0",
     description="A safe proof-of-concept, not production-ready messaging software.",
     lifespan=lifespan,
+    docs_url="/docs" if settings.enable_docs else None,
+    redoc_url="/redoc" if settings.enable_docs else None,
+    openapi_url="/openapi.json" if settings.enable_docs else None,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,5 +53,6 @@ app.include_router(leads.router)
 app.include_router(admin.router)
 app.include_router(webhooks.router)
 app.include_router(ws.router)
-
 app.include_router(dashboard.router)
+app.include_router(two_factor.router)
+app.include_router(signup.router)

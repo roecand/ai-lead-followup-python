@@ -1,0 +1,62 @@
+import hashlib
+import hmac
+import secrets
+from datetime import datetime, timezone
+import uuid
+
+import pyotp
+from cryptography.fernet import Fernet
+
+from backend.core.config import get_settings
+from backend.database import User
+from backend.deps import redis_client
+
+ISSUER = "Meridiem"
+_fernet = Fernet(get_settings().twofa_encryption_key)
+
+
+def new_secret() -> str:
+    return pyotp.random_base32()
+
+
+def otpauth_uri(secret: str, email: str) -> str:
+    return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name=ISSUER)
+
+
+def encrypt(text: str) -> str:
+    return _fernet.encrypt(text.encode()).decode()
+
+
+def decrypt(text: str) -> str:
+    return _fernet.decrypt(text.encode()).decode()
+
+
+async def check_code(user_id: uuid.UUID, secret: str, code: str) -> bool:
+    code = code.strip().replace(" ", "")
+    if not(code.isdigit() and len(code) == 6):
+        return False
+
+    totp = pyotp.TOTP(secret)
+    now = datetime.now(timezone.utc)
+    step = int(now.timestamp()) // 30
+
+    for offset in (-1, 0, 1):
+        if hmac.compare_digest(totp.at(now, offset), code):
+            return await redis_client.claim_totp_step(user_id, step + offset)
+    return False
+
+
+def hash_recovery_code(code: str) -> str:
+    secret = get_settings().verification_secret.encode()
+    normalized = code.strip().replace("-", "").replace(" ", "").lower().encode()
+    return hmac.new(secret, normalized, hashlib.sha256).hexdigest()
+
+def make_recovery_codes(count: int = 10) -> tuple[list[str], list[str]]:
+    codes = [f"{secrets.token_hex(5)}-{secrets.token_hex(5)}" for _ in range(count)]
+    return codes, [hash_recovery_code(c) for c in codes]
+
+
+def second_factor_method(user: User) -> str:
+    return "totp" if user.totp_enabled else "email"
+
+
