@@ -8,7 +8,7 @@ from backend.core.config import get_settings
 from backend.database import create_schema
 from backend.deps import sms_gateway
 from backend.services.followups import run_due_followups
-from backend.routers import admin, auth, dashboard, leads, webhooks, ws, two_factor, signup
+from backend.routers import admin, auth, dashboard, leads, webhooks, ws, two_factor, signup, team
 
 scheduler = AsyncIOScheduler()
 
@@ -56,3 +56,4 @@ app.include_router(ws.router)
 app.include_router(dashboard.router)
 app.include_router(two_factor.router)
 app.include_router(signup.router)
+app.include_router(team.router)

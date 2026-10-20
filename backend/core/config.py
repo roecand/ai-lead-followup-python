@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     email_from: str
     cors_origins: list[str] = ["http://localhost:5173"]
     enable_docs: bool = False
+    frontend_url: str = "http://localhost:5173"
 
 
 @lru_cache

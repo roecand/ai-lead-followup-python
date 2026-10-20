@@ -9,11 +9,12 @@ from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse
 
 from backend.database import RefreshToken, User
-from backend.deps import client_ip, get_db, redis_client
+from backend.deps import client_ip, get_db, redis_client, get_current_user
 from backend.integrations.redis_client import RedisClient
 from backend.schemas import LoginRequest
 from backend.core.security import create_refresh_token, pwd_context
 from backend.schemas.auth import CodeIn
+from backend.schemas.team import MeView
 from backend.services.auth.sessions import set_auth_cookies, unauthorized, clear_auth_cookies, start_session
 from backend.services.auth.two_factor import second_factor_method, decrypt, check_code
 from backend.services.auth.verification import issue_login_code, check_login_code, check_recovery_code
@@ -186,3 +187,7 @@ async def auth_2fa_resend(response: Response, login_challenge: str | None = Cook
         max_age=redis_client.LOGIN_CHALLENGE_TTL_SECONDS,
         path="/auth/login/2fa",
     )
+
+@router.get("/me", response_model=MeView)
+def auth_me(user: User = Depends(get_current_user)) -> MeView:
+    return MeView(name=user.name, email=user.email, role=user.role)

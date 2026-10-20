@@ -22,10 +22,10 @@ export default function SignupPage() {
 
   // --- form state
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [joinCode, setJoinCode] = useState(() => params.get("code")?.trim() ?? "");
+  const [email, setEmail] = useState(() => params.get("email")?.trim() ?? "");
   const [showPassword, setShowPassword] = useState(false);
 
   // --- request state
